@@ -3,7 +3,7 @@
 const express = require('express'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data'); // mount a Railway volume here
 const STATE = path.join(DATA_DIR, 'state.json'), QUEUE = path.join(DATA_DIR, 'queue.json');
@@ -57,6 +57,26 @@ app.post('/api/runner/ingest', runnerAuth, (req, res) => {
   if (inc.audits) cur.audits = inc.audits;
   cur.generatedAt = inc.generatedAt || new Date().toISOString(); cur.sample = false;
   writeJson(STATE, cur); res.json({ ok: true });
+});
+
+// Browser-tab ingest: Claude in Chrome submits a plain form from the LaunchPoint/Discord/Slack tab
+// (cross-origin form posts need no CORS). Fields: token, payload (JSON). Merges into current state.
+function mergeState(inc) {
+  let cur = readJson(STATE, null);
+  if (!cur || cur.sample) cur = { campaigns: [], slack: [], dms: [], audits: [] };
+  for (const c of inc.campaigns || []) {
+    const i = cur.campaigns.findIndex(x => x.id === c.id);
+    if (i >= 0) cur.campaigns[i] = { ...cur.campaigns[i], ...c }; else cur.campaigns.push(c);
+  }
+  for (const k of ['slack', 'dms', 'audits', 'eod', 'accountsCheckedAt', 'scanStatus']) if (inc[k] !== undefined) cur[k] = inc[k];
+  cur.generatedAt = inc.generatedAt || new Date().toISOString(); cur.sample = false;
+  writeJson(STATE, cur); return cur;
+}
+app.post('/api/runner/ingest-form', express.urlencoded({ extended: false, limit: '10mb' }), (req, res) => {
+  if (!TOKEN || !same(String(req.body.token || ''), TOKEN)) return res.status(401).send('bad token');
+  let inc; try { inc = JSON.parse(req.body.payload); } catch { return res.status(400).send('bad payload'); }
+  const cur = mergeState(inc);
+  res.send('ingest ok: ' + cur.campaigns.map(c => c.name + ' ' + (c.creators || []).length).join(', '));
 });
 
 // --- user API ---

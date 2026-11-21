@@ -57,7 +57,7 @@ td.wrap{white-space:normal;min-width:220px}
 </main>
 <div id="toast"></div>
 <script>
-const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack'],['audits','Audits']];
+const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack & DMs'],['audits','Audits']];
 const TEMPLATES={
   checkin:{label:'Daily check-in',text:'Hey {first}, how many posts you getting out today?'},
   missed:{label:'Missed yesterday',text:"Hey {first}, I didn't see a post from you yesterday. Everything good? What's the plan to get back on track today?"},
@@ -87,7 +87,7 @@ function flags(c,x){
   if(low.length)f.push({k:'lowviews',t:'Low-view account: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
   const cut=[];
   if(x.cpm!=null&&x.posts7d>=5&&x.cpm>c.targetCpm*T.cutCpmMult)cut.push('CPM '+money(x.cpm));
-  if(x.responseRate<T.minResp)cut.push('replies '+x.responseRate+'%');
+  if(x.responseRate!=null&&x.responseRate<T.minResp)cut.push('replies '+x.responseRate+'%');
   const exp=x.expectedPerDay*Math.min(7,x.daysOnCampaign||7);
   if(x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
   if(cut.length)f.push({k:'cut',t:'Cut? '+cut.join(', '),c:'red'});
@@ -101,7 +101,7 @@ const pendingUn=c=>c.unanswered.filter(u=>!sentIds.has(u.id));
 async function load(){
   try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true}
   catch(e){try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
-  S.queue=S.queue||[];render();
+  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.coaches=c.coaches||[];c.creators=c.creators||[]});render();
 }
 async function act(list){
   if(live){
@@ -117,7 +117,7 @@ const fill=(t,name)=>t.replaceAll('{first}',name.split(' ')[0]);
 
 function render(){
   const v=(location.hash||'#today').slice(1), cc=camp('capcut');
-  const badges={capcut:cc?pendingUn(cc).length:0,slack:S.slack.length};
+  const badges={capcut:cc?pendingUn(cc).length:0,slack:S.slack.length+(S.dms||[]).length};
   $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome</div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   $('#stamp').textContent='Last scan '+ago(S.generatedAt);
@@ -130,7 +130,7 @@ function vToday(){
   const k=(v,l,cls='')=>`<div class="kpi"><div class="v num ${cls}">${v}</div><div class="l">${l}</div></div>`;
   let h='<div class="grid">'+
     k(cc?pendingUn(cc).length:0,'CapCut creators waiting on a reply','red')+
-    k(S.slack.length,'Slack messages to answer','amb')+
+    k(S.slack.length+(S.dms||[]).length,'Slack messages and Discord DMs to answer','amb')+
     k(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
     k(S.campaigns.reduce((s,c)=>s+(c.role==='cm'?0:c.unanswered.length),0),'Unanswered on oversight campaigns')+
     k(rows.filter(r=>has(r,'cut')).length,'Cut candidates (all campaigns)')+
@@ -139,16 +139,16 @@ function vToday(){
   for(const c of S.campaigns){
     const posted=c.creators.filter(x=>x.postsToday>0).length, posts=c.creators.reduce((s,x)=>s+x.postsToday,0), exp=c.creators.length*c.expectedPerDay;
     const missed=c.creators.filter(x=>x.postsYesterday===0).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
-    const mx=Math.max(1,...c.postsByHourToday.map(n=>n||0));
+    const bars=c.postsByDay?c.postsByDay.map(d=>d.posts):(c.postsByHourToday||[]), mx=Math.max(1,...bars.map(n=>n||0));
     h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Oversight'}</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻</button></h3>
     <div class="row"><span>CPM (7d) vs target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
     <div class="row"><span>Creators posted today</span><b class="num">${posted} / ${c.creators.length}</b></div>
     <div class="row"><span>Posts today vs expected</span><b class="num">${posts} / ${exp}</b></div>
     <div class="row"><span>Missed yesterday</span><b class="num ${missed?'red':''}">${missed}</b></div>
-    <div class="row"><span>Unanswered creators</span><b class="num ${c.unanswered.length?'amb':''}">${c.unanswered.length}${old?` · oldest ${wait(old)}`:''}</b></div>
+    <div class="row"><span>Unanswered creators</span><b class="num ${c.unanswered.length?'amb':''}">${c.discordScannedAt||S.sample?c.unanswered.length+(old?` · oldest ${wait(old)}`:''):'not scanned'}</b></div>
     <div class="row"><span>Not in Discord</span><b class="num">${c.creators.filter(x=>!x.inDiscord).length}</b></div>
-    <div class="spark" title="Posts per hour today">${c.postsByHourToday.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):3}%"></i>`).join('')}</div>
-    <div class="mute" style="font-size:11px;margin-top:4px">Posts by hour · scanned ${ago(c.scannedAt)}</div></div>`;
+    <div class="spark" title="${c.postsByDay?c.postsByDay.map(d=>d.date.slice(5)+': '+d.posts).join(' · '):'Posts per hour today'}">${bars.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):3}%"></i>`).join('')}</div>
+    <div class="mute" style="font-size:11px;margin-top:4px">${c.postsByDay?'Posts per day, last 7 days':'Posts by hour'} · LaunchPoint scanned ${ago(c.scannedAt)}${c.discordScannedAt?' · Discord '+ago(c.discordScannedAt):c.sample===undefined&&!S.sample?' · Discord not scanned yet':''}</div></div>`;
   }
   return h+'</div>';
 }
@@ -199,7 +199,7 @@ function vCreators(){
   return `<div class="bar"><div class="chips">${[['all','All campaigns'],...S.campaigns.map(c=>[c.id,c.name])].map(([k,l])=>`<span class="tag chip ${F.camp===k?'on':''}" data-fc="${esc(k)}">${esc(l)}</span>`).join('')}</div></div>
   <div class="bar"><div class="chips">${FL.map(([k,l])=>`<span class="tag chip ${F.flag===k?'on':''}" data-ff="${k}">${l} · ${count(k)}</span>`).join('')}</div></div>
   <div class="tw"><table><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM</th><th class="n">Target</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d posts</th><th class="n">Replies</th><th>Accounts · avg views</th><th>Flags</th></tr>
-  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate}%</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews<T.lowViews?'red':''}" title="${esc(a.handle)}">${esc(a.platform.slice(0,2))} ${a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="mute">Nobody matches.</td></tr>'}</table></div>
+  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate==null?"—":x.responseRate+"%"}</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews<T.lowViews?'red':''}" title="${esc(a.handle)}">${esc(a.platform.slice(0,2))} ${a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="mute">Nobody matches.</td></tr>'}</table></div>
   <h2>Cut rules</h2><div class="card"><div class="bar">
   <label>CPM above <input class="thr num" data-t="cutCpmMult" type="number" step="0.1" value="${T.cutCpmMult}" style="width:70px">× campaign target</label>
   <label>Reply rate below <input class="thr num" data-t="minResp" type="number" value="${T.minResp}" style="width:70px">%</label>
@@ -209,7 +209,11 @@ function vCreators(){
 }
 
 function vSlack(){
-  if(!S.slack.length)return '<p class="mute">Nothing waiting on you in Slack.</p>';
+  const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
+  const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0));
+  return '<h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+(S.slackScanned||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
+}
+function vSlackList(){
   return S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span><span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span><span style="flex:1"></span>${m.url?`<a href="${esc(m.url)}" style="color:var(--blu)">Open in Slack</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`).join('');
 }
 function vAudits(){
