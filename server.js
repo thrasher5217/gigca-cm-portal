@@ -68,7 +68,14 @@ function mergeState(inc) {
     const i = cur.campaigns.findIndex(x => x.id === c.id);
     if (i >= 0) cur.campaigns[i] = { ...cur.campaigns[i], ...c }; else cur.campaigns.push(c);
   }
-  for (const k of ['slack', 'dms', 'audits', 'eod', 'accountsCheckedAt', 'scanStatus']) if (inc[k] !== undefined) cur[k] = inc[k];
+  for (const k of ['slack', 'dms', 'audits', 'eod', 'accountsCheckedAt']) if (inc[k] !== undefined) cur[k] = inc[k];
+  if (inc.scanStatus) cur.scanStatus = { ...(cur.scanStatus || {}), ...inc.scanStatus };
+  if (inc.completeRescans) { // a full scan finished: clear pending refresh requests
+    const q = getQueue(); let n = 0;
+    q.forEach(a => { if (a.type === 'rescan' && a.status === 'pending') { a.status = 'done'; a.finishedAt = new Date().toISOString(); n++; } });
+    if (n) writeJson(QUEUE, q);
+    cur.scanStatus = { ...(cur.scanStatus || {}), running: false, finishedAt: new Date().toISOString() };
+  }
   cur.generatedAt = inc.generatedAt || new Date().toISOString(); cur.sample = false;
   writeJson(STATE, cur); return cur;
 }
@@ -79,10 +86,27 @@ app.post('/api/runner/ingest-form', express.urlencoded({ extended: false, limit:
   res.send('ingest ok: ' + cur.campaigns.map(c => c.name + ' ' + (c.creators || []).length).join(', '));
 });
 
+// Wake Claude on demand: when a button queues work, call the scheduled task's API trigger so a scan/drain
+// starts right away instead of waiting for the next scheduled run. Set FIRE_URL and FIRE_TOKEN in Railway.
+const FIRE_URL = process.env.FIRE_URL || '', FIRE_TOKEN = process.env.FIRE_TOKEN || '';
+const FIRE = path.join(DATA_DIR, 'fire.json');
+async function fireScan(reason) {
+  if (!FIRE_URL || !FIRE_TOKEN) return { fired: false, why: 'not configured' };
+  const last = readJson(FIRE, {});
+  if (last.at && Date.now() - new Date(last.at) < 10 * 60000 && last.ok) return { fired: false, why: 'a run was started less than 10 minutes ago' };
+  try {
+    const r = await fetch(FIRE_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + FIRE_TOKEN, 'anthropic-beta': 'experimental-cc-routine-2026-04-01',
+      'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: reason }) });
+    const body = await r.json().catch(() => ({}));
+    writeJson(FIRE, { at: new Date().toISOString(), ok: r.ok, status: r.status, session: body.claude_code_session_url || null });
+    return { fired: r.ok, why: r.ok ? 'started' : 'fire endpoint returned ' + r.status };
+  } catch (e) { writeJson(FIRE, { at: new Date().toISOString(), ok: false, status: String(e) }); return { fired: false, why: String(e) }; }
+}
+
 // --- user API ---
 app.use(userAuth);
-app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true }));
-app.post('/api/actions', (req, res) => {
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, fire: { configured: !!(FIRE_URL && FIRE_TOKEN), last: readJson(FIRE, null) } }));
+app.post('/api/actions', async (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
   for (const a of list) {
     if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
@@ -92,7 +116,9 @@ app.post('/api/actions', (req, res) => {
     out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
       channel: a.channel || null, channelId: a.channelId || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
   }
-  writeJson(QUEUE, q.concat(out)); res.json(out);
+  writeJson(QUEUE, q.concat(out));
+  const fire = out.some(a => a.type === 'rescan') ? await fireScan('Manual refresh requested from the GigaCM portal.') : null;
+  res.json({ queued: out, fire });
 });
 app.delete('/api/actions/:id', (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
