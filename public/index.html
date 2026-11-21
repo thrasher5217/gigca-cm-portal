@@ -45,6 +45,13 @@ td.wrap{white-space:normal;min-width:220px}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{cursor:pointer;user-select:none}.chip.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 #toast.on{opacity:1}
+.prog{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.prog .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.prog .top b{font-weight:600}
+.prog .track{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin-top:8px}
+.prog .fill{height:100%;background:var(--acc);border-radius:3px;transition:width .9s linear}
+.prog.done .fill{background:var(--grn)}.prog.late .fill{background:var(--amb)}
+.steps{display:flex;gap:14px;margin-top:6px;font-size:12px;color:var(--mute);flex-wrap:wrap}.steps .ok{color:var(--grn)}.steps .now{color:var(--text);font-weight:600}
+a.dl{color:var(--blu);text-decoration:none;font-size:12px;white-space:nowrap}a.dl:hover{text-decoration:underline}
 @media(max-width:760px){body{grid-template-columns:1fr}nav{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.brand,nav .foot{display:none}nav a{white-space:nowrap;gap:6px}main{padding:14px}}
 </style>
 </head>
@@ -52,12 +59,13 @@ td.wrap{white-space:normal;min-width:220px}
 <nav id="nav"></nav>
 <main>
   <header><h1 id="title"></h1><span class="mute" id="stamp"></span><button id="refresh">↻ Refresh now</button></header>
+  <div id="progress"></div>
   <div id="banner"></div>
   <div id="view"></div>
 </main>
 <div id="toast"></div>
 <script>
-const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack & DMs'],['audits','Audits']];
+const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['artlist','Artlist inbox'],['creatify','Creatify inbox'],['melius','Melius inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack & DMs'],['audits','Audits']];
 const TEMPLATES={
   checkin:{label:'Daily check-in',text:'Hey {first}, how many posts you getting out today?'},
   missed:{label:'Missed yesterday',text:"Hey {first}, I didn't see a post from you yesterday. Everything good? What's the plan to get back on track today?"},
@@ -79,6 +87,12 @@ const money=n=>n==null?'—':'$'+Number(n).toFixed(2);
 const fmtN=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n);
 const ago=iso=>{if(!iso)return'never';const m=Math.max(0,Math.round((Date.now()-new Date(iso))/60000));return m<1?'just now':wait(m)+' ago'};
 const camp=id=>S.campaigns.find(c=>c.id===id);
+const GUILD={capcut:'1569756845319520387',artlist:'1570552478817067038',creatify:'1562201369811877949',melius:'1559661121588306052'};
+// Link to the exact message when the scan recorded its id, otherwise to the channel.
+const msgUrl=(c,u)=>{const g=(c&&(c.guildId||GUILD[c.id]));if(!g||!/^\d+$/.test(String(u.channelId||'')))return null;return 'https://discord.com/channels/'+g+'/'+u.channelId+(/^\d+$/.test(String(u.messageId||''))?'/'+u.messageId:'')};
+const dmUrl=m=>/^\d+$/.test(String(m.id||''))?'https://discord.com/channels/@me/'+m.id+(/^\d+$/.test(String(m.messageId||''))?'/'+m.messageId:''):null;
+const openLink=(url,exact)=>url?`<a class="dl" href="${esc(url)}" target="_blank" rel="noopener">${exact?'Open message in Discord ↗':'Open channel in Discord ↗'}</a>`:'';
+const waitingOn=c=>c?(c.id==='capcut'?pendingUn(c):c.unanswered):[];
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2600)}
 
 function flags(c,x){
@@ -130,12 +144,13 @@ const fill=(t,name)=>t.replaceAll('{first}',name.split(' ')[0]);
 
 function render(){
   const v=(location.hash||'#today').slice(1), cc=camp('capcut');
-  const badges={capcut:cc?pendingUn(cc).length:0,slack:S.slack.length+(S.dms||[]).length};
+  const badges={capcut:cc?pendingUn(cc).length:0,artlist:waitingOn(camp('artlist')).length,creatify:waitingOn(camp('creatify')).length,melius:waitingOn(camp('melius')).length,slack:S.slack.length+(S.dms||[]).length};
   $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome</div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   $('#stamp').textContent='Last scan '+ago(S.generatedAt);
   $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout. Buttons queue actions here but nothing is sent.</div>':'';
-  $('#view').innerHTML=({today:vToday,capcut:vCapcut,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  $('#view').innerHTML=({today:vToday,capcut:vCapcut,artlist:()=>vInbox('artlist'),creatify:()=>vInbox('creatify'),melius:()=>vInbox('melius'),coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  renderProgress();
 }
 
 function vToday(){
@@ -178,7 +193,7 @@ function vCapcut(){
   h+=`<h2>${label} (${list.filter(u=>!sentIds.has(u.id)).length})</h2>`;
   if(!list.length)h+='<p class="mute">Everyone has been answered.</p>';
   for(const u of list){const done=sentIds.has(u.id);
-    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}">Recheck channel</button>`:""}</div>
+    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span>${openLink(msgUrl(c,u),!!u.messageId)}${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}">Recheck channel</button>`:""}</div>
     ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div>
     <textarea id="d_${esc(u.id)}" ${done?'disabled':''}>${esc(u.draft||'')}</textarea>
     <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">${u.draft?'AI draft · edit before sending':'No draft · write a reply or leave it to the coach'}</span></div></div>`}}
@@ -194,6 +209,24 @@ function vCapcut(){
   h+=`<h2>Send queue (${q.length})</h2>`+(q.length?`<div class="tw"><table><tr><th>When</th><th>Action</th><th>To</th><th>Message</th><th>Status</th><th></th></tr>${q.slice(0,40).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${a.type==='rescan'?'Rescan':'Discord message'}</td><td>${esc(a.channel||a.scope||'')}</td><td class="wrap">${esc(a.text||'')}</td><td><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':'amb'}">${esc(a.status)}</span></td><td>${a.status==='pending'?`<button class="sm" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</table></div>`:'<p class="mute">Nothing queued.</p>');
   return h;
 }
+// Oversight campaigns: who is waiting and for how long. Read-only (no replies or templates; sending is CapCut-only).
+function vInbox(id){
+  const c=camp(id); if(!c)return '<p class="mute">No '+esc(id)+' data yet.</p>';
+  const un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin), old=un.reduce((m,u)=>Math.max(m,u.waitingMin),0);
+  const over5=un.filter(u=>u.waitingMin>=300).length, coaches=[...new Set(un.map(u=>u.coach||'Unassigned'))].sort((a,b)=>un.filter(u=>(u.coach||'Unassigned')===b).length-un.filter(u=>(u.coach||'Unassigned')===a).length);
+  const k=(v,l,cls='')=>`<div class="kpi"><div class="v num ${cls}">${v}</div><div class="l">${l}</div></div>`;
+  let h=`<div class="bar"><span class="mute">Oversight only: replies go through the coach. Discord scanned ${ago(c.discordScannedAt)}.</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻ Recheck ${esc(c.name)}</button></div>`;
+  if(!c.discordScannedAt&&!S.sample)return h+'<p class="mute">Discord has not been scanned for this campaign yet.</p>';
+  h+='<div class="grid">'+k(un.length,'Creators waiting on a reply',un.length?'amb':'')+k(old?wait(old):'—','Longest wait',waitCls(old))+k(over5,'Waiting over 5h (strike line)',over5?'red':'')+'</div>';
+  if(!un.length)return h+'<p class="mute">Everyone has been answered.</p>';
+  for(const coach of coaches){
+    const list=un.filter(u=>(u.coach||'Unassigned')===coach);
+    h+=`<h2>${esc(coach)} (${list.length})</h2>`;
+    for(const u of list)h+=`<div class="msg"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="num ${waitCls(u.waitingMin)}">no response for ${wait(u.waitingMin)}</span><span style="flex:1"></span>${openLink(msgUrl(c,u),!!u.messageId)}${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck channel</button>`:''}</div>
+    ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div></div>`;
+  }
+  return h;
+}
 function bulk(id,rows,tpl){
   if(!rows.length)return '<p class="mute">Nobody right now.</p>';
   return `<div class="tw"><table><tr><th><input type="checkbox" data-all="${id}" checked></th><th>Creator</th><th>Coach</th><th class="n">CPM</th><th class="n">Today</th><th class="n">Yesterday</th><th class="n">7d</th></tr>${rows.map(({x})=>`<tr><td><input type="checkbox" class="pick_${id}" value="${esc(x.id)}" checked></td><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.channel)}</span></td><td>${esc(x.coach)}</td><td class="n">${money(x.cpm)}</td><td class="n">${x.postsToday}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td></tr>`).join('')}</table></div>
@@ -205,7 +238,7 @@ function vCoaches(){
   for(const c of S.campaigns){
     h+=`<h2>${esc(c.name)} ${c.role==='cm'?'· you CM':''}</h2><div class="tw"><table><tr><th>Coach</th><th class="n">Creators</th><th class="n">Median response</th><th class="n">Unanswered</th><th class="n">Oldest waiting</th><th class="n">Missed check-ins (7d)</th><th class="n">Strikes</th></tr>
     ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin==null?'mute':k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${k.medianResponseMin==null?'—':wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d??'—'}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes??'—'}</td></tr>`).join('')}</table></div>`;
-    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th><th></th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td><td>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck</button>`:''}</td></tr>`).join('')}</table></div>`;
+    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th><th></th><th></th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td><td>${openLink(msgUrl(c,u),!!u.messageId)}</td><td>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck</button>`:''}</td></tr>`).join('')}</table></div>`;
   }
   return h;
 }
@@ -228,7 +261,7 @@ function vCreators(){
 }
 
 function vSlack(){
-  const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
+  const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}<span style="flex:1"></span>${dmUrl(m)?`<a class="dl" href="${esc(dmUrl(m))}" target="_blank" rel="noopener">Open in Discord ↗</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
   const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0));
   return '<div class="bar"><button class="sm" data-rescan="dms">↻ Recheck DMs</button><button class="sm" data-rescan="slack">↻ Recheck Slack</button></div><h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+((S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
 }
@@ -239,6 +272,52 @@ function vAudits(){
   if(!S.audits.length)return '<p class="mute">No audits loaded yet.</p>';
   return `<div class="tw"><table><tr><th>Campaign</th><th>Coach</th><th>Week</th><th class="n">Score</th><th class="n">Strikes</th><th>Summary</th><th></th></tr>${S.audits.map(a=>`<tr><td>${esc((camp(a.campaign)||{}).name||a.campaign)}</td><td><b>${esc(a.coach)}</b></td><td class="mute">${esc(a.week)}</td><td class="n ${a.score<70?'red':a.score<85?'amb':'grn'}">${a.score}</td><td class="n ${a.strikes>=2?'red':a.strikes?'amb':''}">${a.strikes}</td><td class="wrap">${esc(a.summary)}</td><td>${a.notionUrl?`<a href="${esc(a.notionUrl)}" style="color:var(--blu)">Notion</a>`:''}</td></tr>`).join('')}</table></div>`;
 }
+
+// Recheck progress. The portal only knows when the run was fired and when each source's results land
+// (scanStatus.lpAt / discordAt / finishedAt), so the bar moves on those milestones and estimates in between.
+const PHASES={ // [key, label, minutes incl. run start-up for the first step, milestone in scanStatus]
+  all:[['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',11,'discordAt'],['slack','Slack',1.5,'finishedAt']],
+  campaign:[['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',3,'finishedAt']],
+  channel:[['discord','Discord channel',2.5,'finishedAt']],
+  dms:[['discord','Discord DMs',3,'finishedAt']],
+  slack:[['slack','Slack',3,'finishedAt']]};
+const scopeName=s=>!s||s==='all'?'Full scan':/^channel:/.test(s)?'Channel recheck':s==='dms'?'DMs recheck':s==='slack'?'Slack recheck':((camp(s)||{}).name||s)+' recheck';
+function progressInfo(){
+  const f=S.fire&&S.fire.last; if(!live||!f||!f.ok||!f.at)return null;
+  const t0=+new Date(f.at), now=Date.now(), st=S.scanStatus||{}, mins=(now-t0)/60000;
+  const kind=!f.scope||f.scope==='all'?'all':/^channel:/.test(f.scope)?'channel':['dms','slack'].includes(f.scope)?f.scope:'campaign';
+  const ph=PHASES[kind], total=ph.reduce((a,p)=>a+p[2],0), hit=k=>st[k]&&+new Date(st[k])>=t0-5000?+new Date(st[k]):0;
+  const base={name:scopeName(f.scope),session:f.session,steps:ph.map(p=>({label:p[1],ok:!!hit(p[3])}))};
+  const fin=hit('finishedAt');
+  if(fin)return now-fin<90000?{...base,state:'done',pct:100,text:'Done · results updated'}:null;
+  if(mins>60)return null;
+  let acc=0,prev=t0,cur=ph[ph.length-1];
+  for(const p of ph){const h=hit(p[3]);if(h){acc+=p[2];prev=Math.max(prev,h);continue}cur=p;break}
+  const frac=Math.min(.95,(now-prev)/60000/cur[2]), pct=Math.round((acc+frac*cur[2])/total*100);
+  base.steps.forEach(s=>s.now=s.label===cur[1]&&!s.ok);
+  if(mins>total*2+5)return {...base,state:'late',pct,text:`No final results after ${Math.round(mins)} min. The run may have stopped (logged out, or the Mac Mini's Chrome not connected).`};
+  const left=Math.max(1,Math.round(total-mins));
+  return {...base,state:'run',pct,text:(acc===0&&mins<2?'Starting the run':'Scanning '+cur[1])+` · about ${left} min left`};
+}
+function renderProgress(){
+  const el=$('#progress'), p=progressInfo(); if(!el)return;
+  if(!p){if(el.innerHTML)el.innerHTML='';return}
+  const steps=p.steps.length>1?p.steps.map(s=>`<span class="${s.ok?'ok':s.now?'now':''}">${s.ok?'✓ ':''}${esc(s.label)}</span>`).join(''):'';
+  const link=p.session&&p.state!=='done'?`<a class="dl" href="${esc(p.session)}" target="_blank" rel="noopener">View run ↗</a>`:'';
+  let box=el.querySelector('.prog');
+  if(!box){ // build once, then update pieces so the bar animates smoothly
+    el.innerHTML=`<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="top"><b class="pn"></b><span class="mute pt"></span><span style="flex:1"></span><span class="pl"></span><span class="num pp"></span></div><div class="track"><div class="fill" style="width:0"></div></div><div class="steps"></div></div>`;
+    box=el.querySelector('.prog');
+  }
+  box.className='prog '+p.state; box.setAttribute('aria-valuenow',p.pct);
+  box.querySelector('.pn').textContent=p.name; box.querySelector('.pt').textContent=p.text; box.querySelector('.pp').textContent=p.pct+'%';
+  const pl=box.querySelector('.pl'); if(pl.innerHTML!==link)pl.innerHTML=link;
+  const st=box.querySelector('.steps'); if(st.innerHTML!==steps)st.innerHTML=steps; st.style.display=steps?'':'none';
+  box.querySelector('.fill').style.width=p.pct+'%';
+}
+const typing=()=>['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName);
+let tick=0;
+setInterval(()=>{renderProgress();const p=progressInfo();if(p&&p.state==='run'&&live&&++tick%5===0&&!typing())load()},1000);
 
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
 async function sendTo(ids,text){

@@ -72,6 +72,7 @@ function mergeState(inc) {
   for (const u of inc.channelUpdates || []) { // one channel rechecked: replace just that channel's waiting item
     const c = cur.campaigns.find(x => x.id === u.campaign); if (!c) continue;
     const known = ((c.discord || {}).channels || {})[u.channelId] || {};
+    if (u.guildId && !c.guildId) c.guildId = u.guildId;
     c.unanswered = (c.unanswered || []).filter(x => x.channelId !== u.channelId);
     if (u.item) c.unanswered.push({ ...u.item, coach: known.coach || u.item.coach || '', channel: known.name ? '#' + known.name : u.item.channel });
     if (u.info && c.discord && c.discord.channels) c.discord.channels[u.channelId] = { ...known, ...u.info, name: known.name || u.info.name, cat: known.cat || u.info.cat, coach: known.coach || u.info.coach };
@@ -97,7 +98,7 @@ app.post('/api/runner/ingest-form', express.urlencoded({ extended: false, limit:
 // starts right away instead of waiting for the next scheduled run. Set FIRE_URL and FIRE_TOKEN in Railway.
 const FIRE_URL = process.env.FIRE_URL || '', FIRE_TOKEN = process.env.FIRE_TOKEN || '';
 const FIRE = path.join(DATA_DIR, 'fire.json');
-async function fireScan(reason, scoped) {
+async function fireScan(reason, scoped, scope) {
   if (!FIRE_URL || !FIRE_TOKEN) return { fired: false, why: 'not configured' };
   const last = readJson(FIRE, {});
   const gap = scoped ? 60000 : 10 * 60000;
@@ -106,7 +107,7 @@ async function fireScan(reason, scoped) {
     const r = await fetch(FIRE_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + FIRE_TOKEN, 'anthropic-beta': 'experimental-cc-routine-2026-04-01',
       'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: reason }) });
     const body = await r.json().catch(() => ({}));
-    writeJson(FIRE, { at: new Date().toISOString(), ok: r.ok, status: r.status, session: body.claude_code_session_url || null });
+    writeJson(FIRE, { at: new Date().toISOString(), ok: r.ok, status: r.status, scope: scope || 'all', session: body.claude_code_session_url || null });
     return { fired: r.ok, why: r.ok ? 'started' : 'fire endpoint returned ' + r.status };
   } catch (e) { writeJson(FIRE, { at: new Date().toISOString(), ok: false, status: String(e) }); return { fired: false, why: String(e) }; }
 }
@@ -128,7 +129,7 @@ app.post('/api/actions', async (req, res) => {
   // Only fixed scope formats are ever passed to the task: all | <campaign> | channel:<campaign>:<channelId> | dms | slack
   const rs = out.filter(a => a.type === 'rescan').map(a => String(a.scope || 'all')), ok = /^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):\d{15,22})$/;
   const scope = rs.length === 1 && ok.test(rs[0]) ? rs[0] : 'all';
-  const fire = rs.length ? await fireScan('Manual refresh requested from the GigaCM portal. SCOPE=' + scope, scope !== 'all') : null;
+  const fire = rs.length ? await fireScan('Manual refresh requested from the GigaCM portal. SCOPE=' + scope, scope !== 'all', scope) : null;
   res.json({ queued: out, fire });
 });
 app.delete('/api/actions/:id', (req, res) => {

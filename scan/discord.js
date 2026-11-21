@@ -45,7 +45,7 @@
       const tm = li.querySelector('time[datetime]');
       const ct = [...li.querySelectorAll('[id^="message-content-"]')].find(e => !e.closest('[id^="message-reply-context-"]'));
       const acc = li.querySelector('[id^="message-accessories-"]'), txt = (ct ? ct.innerText : '').trim();
-      if (author && tm) out.push({ a: author, t: tm.getAttribute('datetime'), x: txt.slice(0, 400) || (acc && acc.children.length ? '[attachment]' : ''), b: !!li.querySelector('[class*="botTag"],[class*="appTag"]') });
+      if (author && tm) out.push({ id: li.id.split('-').pop(), a: author, t: tm.getAttribute('datetime'), x: txt.slice(0, 400) || (acc && acc.children.length ? '[attachment]' : ''), b: !!li.querySelector('[class*="botTag"],[class*="appTag"]') });
     }
     return out;
   }
@@ -56,15 +56,15 @@
     const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, un = [], channels = {}, rt = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
-      for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1 }); }
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
+      for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id }); }
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
       runs.forEach((r, i) => { const nx = runs[i + 1]; if (!r.st && nx && r.t > wk) (rt[coach] = rt[coach] || []).push((nx.t - r.t) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
       const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st);
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
         lastCreatorMsgAt: lastC ? new Date(lastC.end).toISOString() : null, lastStaffMsgAt: lastS ? new Date(lastS.end).toISOString() : null };
-      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
+      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
         context: (runs[runs.length - 2] || { x: '' }).x.slice(-300), ack: L.n === 1 && L.x.length < 45 && !L.x.includes('?') && ACK.test(L.x.trim()) });
     }
     const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? Math.round(a[Math.floor(a.length / 2)]) : null; }, coachStats = {};
@@ -78,7 +78,7 @@
         go(`/channels/${G[1]}`); await sleep(3000);
         const msgs = await read(`/channels/${G[1]}/${SC.channelId}`, SC.channelId), name = ((document.title.match(/#([^ |]+)/) || [])[1] || 'channel');
         const r = analyze([{ id: SC.channelId, name, cat: '', msgs }], STAFF);
-        D.channelUpdates = [{ campaign: SC.key, channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
+        D.channelUpdates = [{ campaign: SC.key, guildId: G[1], channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
       } catch (e) { D.errors.push('channel: ' + e); }
     }
     for (const [key, g, re] of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key))) {
@@ -87,17 +87,17 @@
         const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && re.test(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
         for (const ch of list) { D.progress = `${key} ${chans.length}/${list.length}`; chans.push({ id: ch.id, name: ch.name.replace(/ \(.*$/, '').replace(/^unread, /, ''), cat: ch.catName, msgs: await read(`/channels/${g}/${ch.id}`, ch.id).catch(() => []) }); }
         const r = analyze(chans);
-        D.campaigns.push({ id: key, discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
+        D.campaigns.push({ id: key, guildId: g, discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
       } catch (e) { D.errors.push(key + ': ' + e); }
     }
     if (SC.mode === 'all' || SC.mode === 'dms') try {
       D.progress = 'dms'; go('/channels/@me'); await sleep(3000);
       const links = [...document.querySelectorAll('a[href^="/channels/@me/"]')].map(a => ({ id: a.getAttribute('href').split('/').pop(), label: (a.getAttribute('aria-label') || a.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80) })).filter(x => /^\d+$/.test(x.id)).slice(0, 20);
-      const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ a: clean(m.a), t: m.t, x: m.x })).slice(-8) });
+      const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ id: m.id, a: clean(m.a), t: m.t, x: m.x })).slice(-8) });
       const cnt = {}; res.forEach(r => new Set(r.ms.map(m => m.a)).forEach(a => cnt[a] = (cnt[a] || 0) + 1));
       const me = (Object.entries(cnt).sort((a, b) => b[1] - a[1])[0] || [''])[0], now = Date.now();
       D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me) return null; let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
-        return { id: r.id, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
+        return { id: r.id, messageId: run[0].id || null, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
     } catch (e) { D.errors.push('dms: ' + e); }
     const cc = D.campaigns.find(c => c.id === 'capcut'), one = D.channelUpdates && SC.key === 'capcut' && D.channelUpdates[0] && D.channelUpdates[0].item;
     D.mine = one ? [one].filter(u => !u.ack).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : cc ? cc.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : [];
