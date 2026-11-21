@@ -1,0 +1,8 @@
+{
+  "name": "gigacm-portal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": { "start": "node server.js", "sample": "node scripts/gen-sample.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "express": "^4.19.2" }
+}

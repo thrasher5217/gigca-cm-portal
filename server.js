@@ -1,0 +1,83 @@
+// GigaCM Portal server: serves the dashboard, stores the latest scan, and holds the action queue
+// that the Mac Mini runner drains (Discord sends for CapCut, rescans).
+const express = require('express'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false }));
+
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data'); // mount a Railway volume here
+const STATE = path.join(DATA_DIR, 'state.json'), QUEUE = path.join(DATA_DIR, 'queue.json');
+const SAMPLE = path.join(__dirname, 'public', 'state.json');
+const PASS = process.env.PORTAL_PASSWORD || '', TOKEN = process.env.RUNNER_TOKEN || '';
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+const readJson = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
+const writeJson = (f, v) => { fs.writeFileSync(f + '.tmp', JSON.stringify(v)); fs.renameSync(f + '.tmp', f); };
+const sha = s => crypto.createHash('sha256').update(s).digest('hex');
+const same = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const getState = () => readJson(STATE, null) || readJson(SAMPLE, { campaigns: [], slack: [], audits: [] });
+const getQueue = () => readJson(QUEUE, []);
+
+// --- auth: password cookie for you, bearer token for the Mini runner ---
+function userAuth(req, res, next) {
+  if (!PASS) return next();
+  const c = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith('gk='));
+  if (c && same(c.slice(3), sha(PASS))) return next();
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'login required' });
+  res.send('<!doctype html><meta name=viewport content="width=device-width"><body style="background:#0e1012;color:#eee;font:16px system-ui;display:grid;place-items:center;height:100vh"><form method=post action=/login><input type=password name=p placeholder=Password autofocus style="padding:10px;font:inherit"> <button style="padding:10px;font:inherit">Enter</button></form>');
+}
+function runnerAuth(req, res, next) {
+  const h = (req.headers.authorization || '').replace(/^Bearer /, '');
+  if (TOKEN && same(h, TOKEN)) return next();
+  res.status(401).json({ error: 'bad runner token' });
+}
+app.post('/login', (req, res) => {
+  if (PASS && same(sha(req.body.p || ''), sha(PASS)))
+    res.setHeader('Set-Cookie', `gk=${sha(PASS)}; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000; Path=/`);
+  res.redirect('/');
+});
+
+// --- runner API (Mac Mini) ---
+app.get('/api/runner/pending', runnerAuth, (req, res) => res.json(getQueue().filter(a => a.status === 'pending')));
+app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
+  const q = getQueue(), a = q.find(x => x.id === req.params.id);
+  if (!a) return res.status(404).json({ error: 'not found' });
+  a.status = req.body.status || 'done'; a.detail = req.body.detail || ''; a.finishedAt = new Date().toISOString();
+  writeJson(QUEUE, q); res.json(a);
+});
+// Full scan replaces state; partial scan ({campaigns:[one]}, {slack:[...]}) merges by campaign id.
+app.post('/api/runner/ingest', runnerAuth, (req, res) => {
+  const inc = req.body || {}, cur = readJson(STATE, { campaigns: [], slack: [], audits: [] });
+  if (inc.full) { delete inc.full; writeJson(STATE, { ...inc, sample: false }); return res.json({ ok: true }); }
+  for (const c of inc.campaigns || []) {
+    const i = cur.campaigns.findIndex(x => x.id === c.id);
+    if (i >= 0) cur.campaigns[i] = c; else cur.campaigns.push(c);
+  }
+  if (inc.slack) cur.slack = inc.slack;
+  if (inc.audits) cur.audits = inc.audits;
+  cur.generatedAt = inc.generatedAt || new Date().toISOString(); cur.sample = false;
+  writeJson(STATE, cur); res.json({ ok: true });
+});
+
+// --- user API ---
+app.use(userAuth);
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true }));
+app.post('/api/actions', (req, res) => {
+  const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
+  for (const a of list) {
+    if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
+    // Sending is CapCut-only by design; every other campaign is oversight.
+    if (a.type === 'discord_send' && (a.campaign !== 'capcut' || !a.channel || !String(a.text || '').trim()))
+      return res.status(400).json({ error: 'discord_send needs campaign=capcut, channel and text' });
+    out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
+      channel: a.channel || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
+  }
+  writeJson(QUEUE, q.concat(out)); res.json(out);
+});
+app.delete('/api/actions/:id', (req, res) => {
+  const q = getQueue(), a = q.find(x => x.id === req.params.id);
+  if (!a || a.status !== 'pending') return res.status(409).json({ error: 'not pending' });
+  a.status = 'cancelled'; writeJson(QUEUE, q); res.json(a);
+});
+app.use(express.static(path.join(__dirname, 'public')));
+app.listen(process.env.PORT || 3000, () => console.log('gigacm-portal up'));

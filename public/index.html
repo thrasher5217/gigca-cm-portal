@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GigaCM Portal</title>
+<style>
+:root{--bg:#0d0f11;--panel:#15181c;--panel2:#1b1f24;--line:#262b32;--text:#e8eaed;--mute:#8b949e;--acc:#c8f560;--red:#ff6b6b;--amb:#f5b942;--grn:#5ad68a;--blu:#6cb6ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-columns:200px 1fr;min-height:100vh}
+.num,td.n,th.n{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+nav{border-right:1px solid var(--line);padding:18px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:2px}
+.brand{font-weight:700;letter-spacing:.02em;padding:0 10px 14px;font-size:15px}.brand b{color:var(--acc)}
+nav a{color:var(--mute);text-decoration:none;padding:8px 10px;border-radius:7px;display:flex;justify-content:space-between;align-items:center}
+nav a:hover{color:var(--text);background:var(--panel)}nav a.on{color:var(--bg);background:var(--acc);font-weight:600}
+.badge{background:var(--red);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;font-weight:700}nav a.on .badge{background:var(--bg)}
+nav .foot{margin-top:auto;color:var(--mute);font-size:12px;padding:10px}
+main{padding:18px 24px 60px;min-width:0}
+header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:20px;margin:0;flex:1}h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:26px 0 10px;font-weight:600}
+.sample{background:#3a2f0f;border:1px solid #6b5514;color:var(--amb);padding:8px 12px;border-radius:8px;margin-bottom:14px;font-size:13px}
+button,select,input,textarea{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
+button{cursor:pointer}button:hover{border-color:var(--mute)}button.pri{background:var(--acc);color:var(--bg);border-color:var(--acc);font-weight:600}
+button.sm{padding:3px 8px;font-size:12px}button:disabled{opacity:.45;cursor:default}
+textarea{width:100%;min-height:64px;resize:vertical}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi .v{font-size:26px;font-weight:700}.kpi .l{color:var(--mute);font-size:12px}
+.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center}
+.tag{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);color:var(--mute);font-weight:500;white-space:nowrap}
+.tag.red{color:var(--red);border-color:#5a2a2a}.tag.amb{color:var(--amb);border-color:#5a4a1e}.tag.grn{color:var(--grn);border-color:#1f4a31}.tag.blu{color:var(--blu);border-color:#1f3a55}.tag.acc{color:var(--acc);border-color:#4c5a25}
+.row{display:flex;justify-content:space-between;padding:3px 0;color:var(--mute)}.row b{color:var(--text);font-weight:600}
+.red{color:var(--red)}.amb{color:var(--amb)}.grn{color:var(--grn)}.mute{color:var(--mute)}
+.spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:10px}.spark i{flex:1;background:var(--acc);opacity:.8;border-radius:1px;min-height:1px}.spark i.z{background:var(--line)}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-size:12px;font-weight:500;position:sticky;top:0;background:var(--panel)}tr:last-child td{border-bottom:0}td.n,th.n{text-align:right}
+td.wrap{white-space:normal;min-width:220px}
+.msg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.msg.sent{opacity:.5}.msg .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.msg .q{border-left:3px solid var(--line);padding:2px 10px;margin:6px 0 10px;color:#cfd3d8}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{cursor:pointer;user-select:none}.chip.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+#toast.on{opacity:1}
+@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.brand,nav .foot{display:none}nav a{white-space:nowrap;gap:6px}main{padding:14px}}
+</style>
+</head>
+<body>
+<nav id="nav"></nav>
+<main>
+  <header><h1 id="title"></h1><span class="mute" id="stamp"></span><button id="refresh">↻ Refresh now</button></header>
+  <div id="banner"></div>
+  <div id="view"></div>
+</main>
+<div id="toast"></div>
+<script>
+const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack'],['audits','Audits']];
+const TEMPLATES={
+  checkin:{label:'Daily check-in',text:'Hey {first}, how many posts you getting out today?'},
+  missed:{label:'Missed yesterday',text:"Hey {first}, I didn't see a post from you yesterday. Everything good? What's the plan to get back on track today?"},
+  scale:{label:'Offer 5/day',text:'Hey {first}, your CPM is sitting under the campaign target, nice work. Want to bump from 3 posts a day to 5?'},
+  custom:{label:'Custom…',text:''}
+};
+let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set();
+let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
+let F={camp:'all',flag:'all'};
+try{Object.assign(T,JSON.parse(localStorage.getItem('gk_thresholds')||'{}'))}catch(e){}
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const wait=m=>m<60?m+'m':m<1440?Math.floor(m/60)+'h '+(m%60)+'m':Math.floor(m/1440)+'d '+Math.floor(m%1440/60)+'h';
+const waitCls=m=>m>=300?'red':m>=120?'amb':'';
+const money=n=>n==null?'—':'$'+Number(n).toFixed(2);
+const ago=iso=>{if(!iso)return'never';const m=Math.max(0,Math.round((Date.now()-new Date(iso))/60000));return m<1?'just now':wait(m)+' ago'};
+const camp=id=>S.campaigns.find(c=>c.id===id);
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2600)}
+
+function flags(c,x){
+  const f=[];
+  if(!x.inDiscord)f.push({k:'nodiscord',t:'Not in Discord',c:'blu'});
+  if(x.postsYesterday===0)f.push({k:'missed',t:'Missed yesterday · message',c:'red'});
+  if(x.postsToday===0)f.push({k:'today',t:'No post today',c:'amb'});
+  const low=(x.accounts||[]).filter(a=>a.avgViews<T.lowViews);
+  if(low.length)f.push({k:'lowviews',t:'Low-view account: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
+  const cut=[];
+  if(x.cpm!=null&&x.posts7d>=5&&x.cpm>c.targetCpm*T.cutCpmMult)cut.push('CPM '+money(x.cpm));
+  if(x.responseRate<T.minResp)cut.push('replies '+x.responseRate+'%');
+  const exp=x.expectedPerDay*Math.min(7,x.daysOnCampaign||7);
+  if(x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
+  if(cut.length)f.push({k:'cut',t:'Cut? '+cut.join(', '),c:'red'});
+  if(x.cpm!=null&&x.cpm<c.targetCpm&&x.postsYesterday>=x.expectedPerDay)f.push({k:'scale',t:'Under target CPM · offer 5/day',c:'grn'});
+  return f;
+}
+const all=()=>S.campaigns.flatMap(c=>c.creators.map(x=>({c,x,f:flags(c,x)})));
+const has=(r,k)=>r.f.some(f=>f.k===k);
+const pendingUn=c=>c.unanswered.filter(u=>!sentIds.has(u.id));
+
+async function load(){
+  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true}
+  catch(e){try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
+  S.queue=S.queue||[];render();
+}
+async function act(list){
+  if(live){
+    try{const r=await fetch('api/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
+      if(!r.ok)throw new Error((await r.json()).error);await load();return true}
+    catch(e){toast('Failed: '+e.message);return false}
+  }
+  list.forEach(a=>localQueue.push({...a,id:'p'+Math.random(),status:'preview',createdAt:new Date().toISOString()}));
+  return true;
+}
+const queue=()=>(live?S.queue:localQueue).slice().reverse();
+const fill=(t,name)=>t.replaceAll('{first}',name.split(' ')[0]);
+
+function render(){
+  const v=(location.hash||'#today').slice(1), cc=camp('capcut');
+  const badges={capcut:cc?pendingUn(cc).length:0,slack:S.slack.length};
+  $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome</div>`;
+  $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
+  $('#stamp').textContent='Last scan '+ago(S.generatedAt);
+  $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout. Buttons queue actions here but nothing is sent.</div>':'';
+  $('#view').innerHTML=({today:vToday,capcut:vCapcut,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+}
+
+function vToday(){
+  const rows=all(), cc=camp('capcut'), mine=rows.filter(r=>r.c.id==='capcut');
+  const k=(v,l,cls='')=>`<div class="kpi"><div class="v num ${cls}">${v}</div><div class="l">${l}</div></div>`;
+  let h='<div class="grid">'+
+    k(cc?pendingUn(cc).length:0,'CapCut creators waiting on a reply','red')+
+    k(S.slack.length,'Slack messages to answer','amb')+
+    k(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
+    k(S.campaigns.reduce((s,c)=>s+(c.role==='cm'?0:c.unanswered.length),0),'Unanswered on oversight campaigns')+
+    k(rows.filter(r=>has(r,'cut')).length,'Cut candidates (all campaigns)')+
+    k(rows.filter(r=>has(r,'lowviews')).length,'Creators with an account under '+T.lowViews+' avg views','amb')+
+    k(rows.filter(r=>has(r,'scale')).length,'Ready for 5/day','grn')+'</div><h2>Cohort performance today</h2><div class="cards">';
+  for(const c of S.campaigns){
+    const posted=c.creators.filter(x=>x.postsToday>0).length, posts=c.creators.reduce((s,x)=>s+x.postsToday,0), exp=c.creators.length*c.expectedPerDay;
+    const missed=c.creators.filter(x=>x.postsYesterday===0).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
+    const mx=Math.max(1,...c.postsByHourToday.map(n=>n||0));
+    h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Oversight'}</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻</button></h3>
+    <div class="row"><span>CPM (7d) vs target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
+    <div class="row"><span>Creators posted today</span><b class="num">${posted} / ${c.creators.length}</b></div>
+    <div class="row"><span>Posts today vs expected</span><b class="num">${posts} / ${exp}</b></div>
+    <div class="row"><span>Missed yesterday</span><b class="num ${missed?'red':''}">${missed}</b></div>
+    <div class="row"><span>Unanswered creators</span><b class="num ${c.unanswered.length?'amb':''}">${c.unanswered.length}${old?` · oldest ${wait(old)}`:''}</b></div>
+    <div class="row"><span>Not in Discord</span><b class="num">${c.creators.filter(x=>!x.inDiscord).length}</b></div>
+    <div class="spark" title="Posts per hour today">${c.postsByHourToday.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):3}%"></i>`).join('')}</div>
+    <div class="mute" style="font-size:11px;margin-top:4px">Posts by hour · scanned ${ago(c.scannedAt)}</div></div>`;
+  }
+  return h+'</div>';
+}
+
+function vCapcut(){
+  const c=camp('capcut'); if(!c)return '<p class="mute">No CapCut data yet.</p>';
+  const rows=c.creators.map(x=>({c,x,f:flags(c,x)})), un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin);
+  let h=`<h2>Needs a response (${pendingUn(c).length})</h2>`;
+  if(!un.length)h+='<p class="mute">Everyone has been answered.</p>';
+  for(const u of un){const done=sentIds.has(u.id);
+    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span><button class="sm" data-recheck="${esc(u.channel)}">Recheck channel</button></div>
+    <div class="q">${esc(u.message)}</div>
+    <textarea id="d_${esc(u.id)}" ${done?'disabled':''}>${esc(u.draft||'')}</textarea>
+    <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">AI draft · edit before sending</span></div></div>`}
+  const missed=rows.filter(r=>has(r,'missed')&&r.x.inDiscord);
+  h+=`<h2>Missed yesterday — needs a message (${missed.length})</h2>`+bulk('missed',missed,'missed');
+  const scale=rows.filter(r=>has(r,'scale')&&r.x.inDiscord);
+  h+=`<h2>Under target CPM — offer 5 posts a day (${scale.length})</h2>`+bulk('scale',scale,'scale');
+  const aud={all:rows.filter(r=>r.x.inDiscord),today:rows.filter(r=>r.x.inDiscord&&r.x.postsToday===0)};
+  h+=`<h2>Mass message</h2><div class="card"><div class="bar"><label>To <select id="mm_aud"><option value="all">All CapCut creators in Discord (${aud.all.length})</option><option value="today">No post yet today (${aud.today.length})</option></select></label>
+  <label>Template <select id="mm_tpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label></div>
+  <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button class="pri" id="mm_send">Send to each creator's channel</button><span class="mute" style="font-size:12px">{first} becomes each creator's first name</span></div></div>`;
+  const q=queue();
+  h+=`<h2>Send queue (${q.length})</h2>`+(q.length?`<div class="tw"><table><tr><th>When</th><th>Action</th><th>To</th><th>Message</th><th>Status</th><th></th></tr>${q.slice(0,40).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${a.type==='rescan'?'Rescan':'Discord message'}</td><td>${esc(a.channel||a.scope||'')}</td><td class="wrap">${esc(a.text||'')}</td><td><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':'amb'}">${esc(a.status)}</span></td><td>${a.status==='pending'?`<button class="sm" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</table></div>`:'<p class="mute">Nothing queued.</p>');
+  return h;
+}
+function bulk(id,rows,tpl){
+  if(!rows.length)return '<p class="mute">Nobody right now.</p>';
+  return `<div class="tw"><table><tr><th><input type="checkbox" data-all="${id}" checked></th><th>Creator</th><th>Coach</th><th class="n">CPM</th><th class="n">Today</th><th class="n">Yesterday</th><th class="n">7d</th></tr>${rows.map(({x})=>`<tr><td><input type="checkbox" class="pick_${id}" value="${esc(x.id)}" checked></td><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.channel)}</span></td><td>${esc(x.coach)}</td><td class="n">${money(x.cpm)}</td><td class="n">${x.postsToday}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td></tr>`).join('')}</table></div>
+  <div class="bar"><input id="bt_${id}" style="flex:1;min-width:240px" value="${esc(TEMPLATES[tpl].text)}"><button class="pri" data-bulk="${id}">Message selected</button></div>`;
+}
+
+function vCoaches(){
+  let h='<p class="mute">Red = breaks a strike rule: median response over 5h, or 7+ missed check-ins in the week.</p>';
+  for(const c of S.campaigns){
+    h+=`<h2>${esc(c.name)} ${c.role==='cm'?'· you CM':''}</h2><div class="tw"><table><tr><th>Coach</th><th class="n">Creators</th><th class="n">Median response</th><th class="n">Unanswered</th><th class="n">Oldest waiting</th><th class="n">Missed check-ins (7d)</th><th class="n">Strikes</th></tr>
+    ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes}</td></tr>`).join('')}</table></div>`;
+    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td></tr>`).join('')}</table></div>`;
+  }
+  return h;
+}
+
+function vCreators(){
+  const FL=[['all','All'],['missed','Missed yesterday'],['today','No post today'],['nodiscord','Not in Discord'],['lowviews','Low-view accounts'],['cut','Cut candidates'],['scale','Offer 5/day']];
+  let rows=all().filter(r=>F.camp==='all'||r.c.id===F.camp);
+  const count=k=>k==='all'?rows.length:rows.filter(r=>has(r,k)).length;
+  const shown=rows.filter(r=>F.flag==='all'||has(r,F.flag)).sort((a,b)=>b.f.length-a.f.length||(b.x.cpm||0)-(a.x.cpm||0));
+  return `<div class="bar"><div class="chips">${[['all','All campaigns'],...S.campaigns.map(c=>[c.id,c.name])].map(([k,l])=>`<span class="tag chip ${F.camp===k?'on':''}" data-fc="${esc(k)}">${esc(l)}</span>`).join('')}</div></div>
+  <div class="bar"><div class="chips">${FL.map(([k,l])=>`<span class="tag chip ${F.flag===k?'on':''}" data-ff="${k}">${l} · ${count(k)}</span>`).join('')}</div></div>
+  <div class="tw"><table><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM</th><th class="n">Target</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d posts</th><th class="n">Replies</th><th>Accounts · avg views</th><th>Flags</th></tr>
+  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate}%</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews<T.lowViews?'red':''}" title="${esc(a.handle)}">${esc(a.platform.slice(0,2))} ${a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="mute">Nobody matches.</td></tr>'}</table></div>
+  <h2>Cut rules</h2><div class="card"><div class="bar">
+  <label>CPM above <input class="thr num" data-t="cutCpmMult" type="number" step="0.1" value="${T.cutCpmMult}" style="width:70px">× campaign target</label>
+  <label>Reply rate below <input class="thr num" data-t="minResp" type="number" value="${T.minResp}" style="width:70px">%</label>
+  <label>Post volume below <input class="thr num" data-t="minVolPct" type="number" value="${T.minVolPct}" style="width:70px">% of expected</label>
+  <label>Flag accounts averaging under <input class="thr num" data-t="lowViews" type="number" value="${T.lowViews}" style="width:70px"> views</label></div>
+  <div class="mute" style="font-size:12px">Any one of these flags a creator as a cut candidate. "Offer 5/day" = CPM under the campaign target and hit expected posts yesterday. Account view averages are checked once a day (last check ${ago(S.accountsCheckedAt)}).</div></div>`;
+}
+
+function vSlack(){
+  if(!S.slack.length)return '<p class="mute">Nothing waiting on you in Slack.</p>';
+  return S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span><span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span><span style="flex:1"></span>${m.url?`<a href="${esc(m.url)}" style="color:var(--blu)">Open in Slack</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`).join('');
+}
+function vAudits(){
+  if(!S.audits.length)return '<p class="mute">No audits loaded yet.</p>';
+  return `<div class="tw"><table><tr><th>Campaign</th><th>Coach</th><th>Week</th><th class="n">Score</th><th class="n">Strikes</th><th>Summary</th><th></th></tr>${S.audits.map(a=>`<tr><td>${esc((camp(a.campaign)||{}).name||a.campaign)}</td><td><b>${esc(a.coach)}</b></td><td class="mute">${esc(a.week)}</td><td class="n ${a.score<70?'red':a.score<85?'amb':'grn'}">${a.score}</td><td class="n ${a.strikes>=2?'red':a.strikes?'amb':''}">${a.strikes}</td><td class="wrap">${esc(a.summary)}</td><td>${a.notionUrl?`<a href="${esc(a.notionUrl)}" style="color:var(--blu)">Notion</a>`:''}</td></tr>`).join('')}</table></div>`;
+}
+
+const cx=id=>camp('capcut').creators.find(x=>x.id===id);
+async function sendTo(ids,text){
+  const list=ids.map(cx).filter(x=>x&&x.inDiscord).map(x=>({type:'discord_send',campaign:'capcut',creator:x.name,channel:x.channel,text:fill(text,x.name)}));
+  if(!list.length||!text.trim())return toast('Nothing to send');
+  if(await act(list)){toast(`Queued ${list.length} message${list.length>1?'s':''}`+(live?'':' (preview: not sent)'));render()}
+}
+document.addEventListener('click',async e=>{
+  const t=e.target, d=t.dataset||{};
+  if(t.id==='refresh'){if(await act([{type:'rescan',scope:'all'}]))toast(live?'Full rescan queued for the Mac Mini':'Rescan queued (preview)');render()}
+  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast('Rescan queued: '+d.rescan);render()}
+  else if(d.recheck){if(await act([{type:'rescan',scope:'capcut:'+d.recheck}]))toast('Rechecking '+d.recheck);render()}
+  else if(d.reply){const u=camp('capcut').unanswered.find(x=>x.id===d.reply), text=$('#d_'+CSS.escape(d.reply)).value;
+    if(!text.trim())return toast('Write a reply first');
+    if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}
+  else if(d.bulk){sendTo([...document.querySelectorAll('.pick_'+d.bulk+':checked')].map(i=>i.value),$('#bt_'+d.bulk).value)}
+  else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&(a==='all'||x.postsToday===0)).map(x=>x.id),$('#mm_text').value)}
+  else if(d.cancel){if(live){await fetch('api/actions/'+d.cancel,{method:'DELETE'});await load()}}
+  else if(d.fc){F.camp=d.fc;render()}
+  else if(d.ff){F.flag=d.ff;render()}
+});
+document.addEventListener('change',e=>{
+  const t=e.target,d=t.dataset||{};
+  if(t.id==='mm_tpl')$('#mm_text').value=TEMPLATES[t.value].text;
+  else if(d.all)document.querySelectorAll('.pick_'+d.all).forEach(i=>i.checked=t.checked);
+  else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
+});
+addEventListener('hashchange',render);
+load();
+// Live site only: pull fresh state every 30s unless you're mid-typing.
+setInterval(()=>{if(live&&!['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName))load()},30000);
+</script>
+</body>
+</html>
