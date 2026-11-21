@@ -72,8 +72,8 @@ const TEMPLATES={
   scale:{label:'Offer 5/day',text:'Hey {first}, your CPM is sitting under the campaign target, nice work. Want to bump from 3 posts a day to 5?'},
   custom:{label:'Custom…',text:''}
 };
-let lastFire=null;
-const fireMsg=(quick)=>!live?'Rescan queued (preview)':lastFire&&lastFire.fired?(quick?'Recheck started on the Mac Mini. About 2 minutes.':'Scan started on the Mac Mini. Results in about 10 minutes.'):lastFire&&lastFire.why==='not configured'?'Queued. Instant refresh is not connected yet, so it runs at the next scheduled scan.':'Queued: '+(lastFire?lastFire.why:'waiting for next scan');
+const runnerAge=()=>S.runner&&S.runner.lastPollAt?(Date.now()-new Date(S.runner.lastPollAt))/60000:null;
+const fireMsg=()=>!live?'Rescan queued (preview)':runnerAge()!=null&&runnerAge()<2?'Queued. The Mac Mini picks it up within 30 seconds.':'Queued, but the Mac Mini has not checked in recently, so it will run once it is back online.';
 let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set();
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
@@ -133,7 +133,7 @@ async function load(){
 async function act(list){
   if(live){
     try{const r=await fetch('api/actions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(list)});
-      const j=await r.json();if(!r.ok)throw new Error(j.error);lastFire=j.fire;await load();return true}
+      const j=await r.json();if(!r.ok)throw new Error(j.error);await load();return true}
     catch(e){toast('Failed: '+e.message);return false}
   }
   list.forEach(a=>localQueue.push({...a,id:'p'+Math.random(),status:'preview',createdAt:new Date().toISOString()}));
@@ -145,7 +145,7 @@ const fill=(t,name)=>t.replaceAll('{first}',name.split(' ')[0]);
 function render(){
   const v=(location.hash||'#today').slice(1), cc=camp('capcut');
   const badges={capcut:cc?pendingUn(cc).length:0,artlist:waitingOn(camp('artlist')).length,creatify:waitingOn(camp('creatify')).length,melius:waitingOn(camp('melius')).length,slack:S.slack.length+(S.dms||[]).length};
-  $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome</div>`;
+  $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome${live&&S.runner&&S.runner.lastPollAt?`<br>${runnerAge()<2?'<span class="grn">● Mac Mini online</span>':'<span class="amb">● Mac Mini last seen '+ago(S.runner.lastPollAt)+'</span>'}`:''}</div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   $('#stamp').textContent='Last scan '+ago(S.generatedAt);
   $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout. Buttons queue actions here but nothing is sent.</div>':'';
@@ -283,27 +283,38 @@ const PHASES={ // [key, label, minutes incl. run start-up for the first step, mi
   slack:[['slack','Slack',3,'finishedAt']]};
 const scopeName=s=>!s||s==='all'?'Full scan':/^channel:/.test(s)?'Channel recheck':s==='dms'?'DMs recheck':s==='slack'?'Slack recheck':((camp(s)||{}).name||s)+' recheck';
 function progressInfo(){
-  const f=S.fire&&S.fire.last; if(!live||!f||!f.ok||!f.at)return null;
-  const t0=+new Date(f.at), now=Date.now(), st=S.scanStatus||{}, mins=(now-t0)/60000;
-  const kind=!f.scope||f.scope==='all'?'all':/^channel:/.test(f.scope)?'channel':['dms','slack'].includes(f.scope)?f.scope:'campaign';
-  const ph=PHASES[kind], total=ph.reduce((a,p)=>a+p[2],0), hit=k=>st[k]&&+new Date(st[k])>=t0-5000?+new Date(st[k]):0;
-  const base={name:scopeName(f.scope),session:f.session,steps:ph.map(p=>({label:p[1],ok:!!hit(p[3])}))};
-  const fin=hit('finishedAt');
-  if(fin)return now-fin<90000?{...base,state:'done',pct:100,text:'Done · results updated'}:null;
-  if(mins>60)return null;
-  let acc=0,prev=t0,cur=ph[ph.length-1];
-  for(const p of ph){const h=hit(p[3]);if(h){acc+=p[2];prev=Math.max(prev,h);continue}cur=p;break}
-  const frac=Math.min(.95,(now-prev)/60000/cur[2]), pct=Math.round((acc+frac*cur[2])/total*100);
-  base.steps.forEach(s=>s.now=s.label===cur[1]&&!s.ok);
-  if(mins>total*2+5)return {...base,state:'late',pct,text:`No final results after ${Math.round(mins)} min. The run may have stopped (logged out, or the Mac Mini's Chrome not connected).`};
-  const left=Math.max(1,Math.round(total-mins));
-  return {...base,state:'run',pct,text:(acc===0&&mins<2?'Starting the run':'Scanning '+cur[1])+` · about ${left} min left`};
+  if(!live)return null;
+  const now=Date.now(), rs=(S.queue||[]).filter(a=>a.type==='rescan'), a=rs.reduce((m,x)=>!m||+new Date(x.createdAt)>+new Date(m.createdAt)?x:m,null);
+  const running=rs.find(x=>x.status==='running'), cur=running||a; if(!cur)return null;
+  const scope=cur.runScope||cur.scope||'all', name=scopeName(scope)+(cur.source==='schedule'?' (scheduled)':'');
+  const kind=scope==='all'?'all':/^channel:/.test(scope)?'channel':['dms','slack'].includes(scope)?scope:'campaign';
+  const ph=PHASES[kind], total=ph.reduce((s,p)=>s+p[2],0), age=runnerAge();
+  const steps=ph.map(p=>({label:p[1],ok:false}));
+  if(cur.status==='pending'){
+    const waited=(now-new Date(cur.createdAt))/60000; if(waited>120)return null;
+    const off=age==null||age>2;
+    return {name,steps,state:off?'late':'run',pct:2,text:off?`Waiting for the Mac Mini · it has not checked in ${age==null?'yet':'for '+wait(Math.round(age))}. Is it awake, with the runner installed?`:'Queued · the Mac Mini picks it up within 30 seconds'};
+  }
+  if(cur.status==='done'||cur.status==='failed'||cur.status==='cancelled'){
+    const fin=cur.finishedAt?+new Date(cur.finishedAt):0; if(!fin||now-fin>(cur.status==='done'?90000:15*60000))return null;
+    if(cur.status==='done')return {name,steps:steps.map(s=>({...s,ok:true})),state:'done',pct:100,text:'Done · results updated'};
+    return {name,steps,state:'late',pct:100,text:'Failed'+(cur.detail?': '+cur.detail:'')};
+  }
+  // running: move on each source's results landing after the run started, estimate in between
+  const t0=+new Date(cur.startedAt||cur.createdAt), st=S.scanStatus||{}, mins=(now-t0)/60000, hit=k=>st[k]&&+new Date(st[k])>=t0-5000?+new Date(st[k]):0;
+  let acc=0,prev=t0,cp=ph[ph.length-1];
+  ph.forEach((p,i)=>{steps[i].ok=!!hit(p[3])});
+  for(const p of ph){const h=hit(p[3]);if(h){acc+=p[2];prev=Math.max(prev,h);continue}cp=p;break}
+  const frac=Math.min(.95,(now-prev)/60000/cp[2]), pct=Math.max(3,Math.round((acc+frac*cp[2])/total*100));
+  steps.forEach((s,i)=>s.now=!s.ok&&ph[i]===cp);
+  if(mins>total*2+5)return {name,steps,state:'late',pct,text:`Still running after ${Math.round(mins)} min · it may be stuck (logged out somewhere?). It is freed automatically after 40 min.`};
+  return {name,steps,state:'run',pct,text:(acc===0&&mins<1.5?'Starting on the Mac Mini':'Scanning '+cp[1])+` · about ${Math.max(1,Math.round(total-mins))} min left`};
 }
 function renderProgress(){
   const el=$('#progress'), p=progressInfo(); if(!el)return;
   if(!p){if(el.innerHTML)el.innerHTML='';return}
   const steps=p.steps.length>1?p.steps.map(s=>`<span class="${s.ok?'ok':s.now?'now':''}">${s.ok?'✓ ':''}${esc(s.label)}</span>`).join(''):'';
-  const link=p.session&&p.state!=='done'?`<a class="dl" href="${esc(p.session)}" target="_blank" rel="noopener">View run ↗</a>`:'';
+  const link='';
   let box=el.querySelector('.prog');
   if(!box){ // build once, then update pieces so the bar animates smoothly
     el.innerHTML=`<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="top"><b class="pn"></b><span class="mute pt"></span><span style="flex:1"></span><span class="pl"></span><span class="num pp"></span></div><div class="track"><div class="fill" style="width:0"></div></div><div class="steps"></div></div>`;
@@ -317,7 +328,7 @@ function renderProgress(){
 }
 const typing=()=>['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName);
 let tick=0;
-setInterval(()=>{renderProgress();const p=progressInfo();if(p&&p.state==='run'&&live&&++tick%5===0&&!typing())load()},1000);
+setInterval(()=>{renderProgress();const p=progressInfo();if(p&&p.state!=='done'&&live&&++tick%5===0&&!typing())load()},1000);
 
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
 async function sendTo(ids,text){
@@ -328,8 +339,8 @@ async function sendTo(ids,text){
 document.addEventListener('click',async e=>{
   const t=e.target, d=t.dataset||{};
   if(t.id==='refresh'){if(await act([{type:'rescan',scope:'all'}]))toast(fireMsg());render()}
-  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast(fireMsg(d.rescan==='dms'||d.rescan==='slack'));render()}
-  else if(d.recheck){if(await act([{type:'rescan',scope:'channel:'+(d.camp||'capcut')+':'+d.recheck}]))toast(fireMsg(1));render()}
+  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast(fireMsg());render()}
+  else if(d.recheck){if(await act([{type:'rescan',scope:'channel:'+(d.camp||'capcut')+':'+d.recheck}]))toast(fireMsg());render()}
   else if(d.reply){const u=camp('capcut').unanswered.find(x=>x.id===d.reply), text=$('#d_'+CSS.escape(d.reply)).value;
     if(!text.trim())return toast('Write a reply first');
     if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,channelId:u.channelId||null,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}

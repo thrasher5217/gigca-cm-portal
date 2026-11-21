@@ -38,7 +38,48 @@ app.post('/login', (req, res) => {
 });
 
 // --- runner API (Mac Mini) ---
+const RUNNER = path.join(DATA_DIR, 'runner.json'); // Mac Mini heartbeat + last scheduled slot
+const SCOPE_OK = /^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):\d{15,22})$/;
+// Full scans at :43 past these hours, Chicago time. The Mac Mini asks every 30s; the portal decides when a scheduled scan is due.
+const SCHEDULE = { tz: 'America/Chicago', hours: [8, 11, 14, 17, 20, 23], minute: 43 };
+function dueSlot(now = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: SCHEDULE.tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(x => [x.type, x.value]));
+  const h = +p.hour, m = +p.minute, slotH = [...SCHEDULE.hours].reverse().find(x => x < h || (x === h && m >= SCHEDULE.minute));
+  if (slotH === undefined || (h - slotH) * 60 + m - SCHEDULE.minute > 90) return null; // only within 90 min of the slot
+  return `${p.year}-${p.month}-${p.day} ${String(slotH).padStart(2, '0')}:${SCHEDULE.minute}`;
+}
 app.get('/api/runner/pending', runnerAuth, (req, res) => res.json(getQueue().filter(a => a.status === 'pending')));
+// The Mac Mini calls this every 30s. Returns the work to do now (or scope:null), marking those rescans as running.
+app.post('/api/runner/claim', runnerAuth, (req, res) => {
+  const rn = readJson(RUNNER, {}), q = getQueue(), now = new Date().toISOString();
+  rn.lastPollAt = now; rn.host = String((req.body || {}).host || '').slice(0, 60);
+  if (q.some(a => a.type === 'rescan' && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'a scan is already running' }); }
+  let picked = q.filter(a => a.type === 'rescan' && a.status === 'pending');
+  const slot = dueSlot();
+  if (!picked.length && slot && rn.lastSlot !== slot) {
+    const a = { id: crypto.randomUUID(), type: 'rescan', scope: 'all', source: 'schedule', status: 'pending', createdAt: now };
+    q.push(a); picked = [a]; rn.lastSlot = slot;
+  }
+  if (!picked.length) { writeJson(RUNNER, rn); return res.json({ scope: null }); }
+  const scopes = [...new Set(picked.map(a => SCOPE_OK.test(String(a.scope || 'all')) ? String(a.scope || 'all') : 'all'))];
+  const scope = scopes.length === 1 ? scopes[0] : 'all';
+  picked.forEach(a => { a.status = 'running'; a.startedAt = now; a.runScope = scope; });
+  if (scope === 'all' && slot) rn.lastSlot = slot; // a manual full scan in the slot window counts as the scheduled one
+  writeJson(QUEUE, q); writeJson(RUNNER, rn);
+  res.json({ scope, ids: picked.map(a => a.id) });
+});
+app.post('/api/runner/finish', runnerAuth, (req, res) => {
+  const b = req.body || {}, ids = new Set(Array.isArray(b.ids) ? b.ids : []), q = getQueue(), now = new Date().toISOString();
+  const status = b.status === 'failed' ? 'failed' : 'done'; let n = 0;
+  q.forEach(a => { if (ids.has(a.id) && a.status === 'running') { a.status = status; a.finishedAt = now; a.detail = String(b.detail || '').slice(0, 300); n++; } });
+  writeJson(QUEUE, q); res.json({ ok: true, updated: n });
+});
+// A run that died without reporting back (Mac Mini asleep, crash): free it after 40 minutes so the next request can run.
+setInterval(() => {
+  const q = getQueue(), cut = Date.now() - 40 * 60000; let n = 0;
+  q.forEach(a => { if (a.status === 'running' && a.startedAt && +new Date(a.startedAt) < cut) { a.status = 'failed'; a.finishedAt = new Date().toISOString(); a.detail = 'no report from the Mac Mini after 40 minutes'; n++; } });
+  if (n) writeJson(QUEUE, q);
+}, 60000);
 app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
@@ -78,12 +119,7 @@ function mergeState(inc) {
     if (u.info && c.discord && c.discord.channels) c.discord.channels[u.channelId] = { ...known, ...u.info, name: known.name || u.info.name, cat: known.cat || u.info.cat, coach: known.coach || u.info.coach };
   }
   if (inc.scanStatus) cur.scanStatus = { ...(cur.scanStatus || {}), ...inc.scanStatus };
-  if (inc.completeRescans) { // a full scan finished: clear pending refresh requests
-    const q = getQueue(); let n = 0;
-    q.forEach(a => { if (a.type === 'rescan' && a.status === 'pending') { a.status = 'done'; a.finishedAt = new Date().toISOString(); n++; } });
-    if (n) writeJson(QUEUE, q);
-    cur.scanStatus = { ...(cur.scanStatus || {}), running: false, finishedAt: new Date().toISOString() };
-  }
+  if (inc.completeRescans) cur.scanStatus = { ...(cur.scanStatus || {}), running: false, finishedAt: new Date().toISOString() };
   cur.generatedAt = inc.generatedAt || new Date().toISOString(); cur.sample = false;
   writeJson(STATE, cur); return cur;
 }
@@ -94,27 +130,9 @@ app.post('/api/runner/ingest-form', express.urlencoded({ extended: false, limit:
   res.send('ingest ok: ' + cur.campaigns.map(c => c.name + ' ' + (c.creators || []).length).join(', '));
 });
 
-// Wake Claude on demand: when a button queues work, call the scheduled task's API trigger so a scan/drain
-// starts right away instead of waiting for the next scheduled run. Set FIRE_URL and FIRE_TOKEN in Railway.
-const FIRE_URL = process.env.FIRE_URL || '', FIRE_TOKEN = process.env.FIRE_TOKEN || '';
-const FIRE = path.join(DATA_DIR, 'fire.json');
-async function fireScan(reason, scoped, scope) {
-  if (!FIRE_URL || !FIRE_TOKEN) return { fired: false, why: 'not configured' };
-  const last = readJson(FIRE, {});
-  const gap = scoped ? 60000 : 10 * 60000;
-  if (last.at && Date.now() - new Date(last.at) < gap && last.ok) return { fired: false, why: 'a run was started ' + (scoped ? 'less than a minute ago' : 'less than 10 minutes ago') };
-  try {
-    const r = await fetch(FIRE_URL, { method: 'POST', headers: { Authorization: 'Bearer ' + FIRE_TOKEN, 'anthropic-beta': 'experimental-cc-routine-2026-04-01',
-      'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' }, body: JSON.stringify({ text: reason }) });
-    const body = await r.json().catch(() => ({}));
-    writeJson(FIRE, { at: new Date().toISOString(), ok: r.ok, status: r.status, scope: scope || 'all', session: body.claude_code_session_url || null });
-    return { fired: r.ok, why: r.ok ? 'started' : 'fire endpoint returned ' + r.status };
-  } catch (e) { writeJson(FIRE, { at: new Date().toISOString(), ok: false, status: String(e) }); return { fired: false, why: String(e) }; }
-}
-
 // --- user API ---
 app.use(userAuth);
-app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, fire: { configured: !!(FIRE_URL && FIRE_TOKEN), last: readJson(FIRE, null) } }));
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}) }));
 app.post('/api/actions', async (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
   for (const a of list) {
@@ -125,12 +143,12 @@ app.post('/api/actions', async (req, res) => {
     out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
       channel: a.channel || null, channelId: a.channelId || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
   }
-  writeJson(QUEUE, q.concat(out));
-  // Only fixed scope formats are ever passed to the task: all | <campaign> | channel:<campaign>:<channelId> | dms | slack
-  const rs = out.filter(a => a.type === 'rescan').map(a => String(a.scope || 'all')), ok = /^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):\d{15,22})$/;
-  const scope = rs.length === 1 && ok.test(rs[0]) ? rs[0] : 'all';
-  const fire = rs.length ? await fireScan('Manual refresh requested from the GigaCM portal. SCOPE=' + scope, scope !== 'all', scope) : null;
-  res.json({ queued: out, fire });
+  // Rescans wait in the queue until the Mac Mini claims them (it asks every 30s). Only fixed scope formats are accepted,
+  // and a scope that is already waiting is not queued twice.
+  const keep = out.filter(a => a.type !== 'rescan' || (SCOPE_OK.test(String(a.scope || 'all')) && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
+  keep.forEach(a => { if (a.type === 'rescan') a.scope = a.scope || 'all'; });
+  writeJson(QUEUE, q.concat(keep));
+  res.json({ queued: keep, runner: readJson(RUNNER, {}) });
 });
 app.delete('/api/actions/:id', (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
