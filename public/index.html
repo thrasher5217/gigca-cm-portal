@@ -81,9 +81,13 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clea
 function flags(c,x){
   const f=[];
   if(!x.inDiscord)f.push({k:'nodiscord',t:'Not in Discord',c:'blu'});
-  if(x.postsYesterday===0)f.push({k:'missed',t:'Missed yesterday · message',c:'red'});
-  if(x.postsToday===0)f.push({k:'today',t:'No post today',c:'amb'});
-  const low=(x.accounts||[]).filter(a=>a.avgViews<T.lowViews);
+  const posted=x.everPosted!==false;
+  if(!posted)f.push({k:'noposts',t:'No posts yet · day '+(x.daysOnCampaign||'?'),c:x.daysOnCampaign>5?'red':'blu'});
+  if(posted&&x.postsYesterday===0)f.push({k:'missed',t:'Missed yesterday · message',c:'red'});
+  if(posted&&x.postsToday===0)f.push({k:'today',t:'No post today',c:'amb'});
+  const redA=(x.accounts||[]).filter(a=>a.health==='red');
+  if(redA.length)f.push({k:'health',t:'Account health red: '+redA.map(a=>a.platform).join(', '),c:'amb'});
+  const low=(x.accounts||[]).filter(a=>a.avgViews!=null&&a.avgViews<T.lowViews);
   if(low.length)f.push({k:'lowviews',t:'Low-view account: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
   const cut=[];
   if(x.cpm!=null&&x.posts7d>=5&&x.cpm>c.targetCpm*T.cutCpmMult)cut.push('CPM '+money(x.cpm));
@@ -96,12 +100,17 @@ function flags(c,x){
 }
 const all=()=>S.campaigns.flatMap(c=>c.creators.map(x=>({c,x,f:flags(c,x)})));
 const has=(r,k)=>r.f.some(f=>f.k===k);
-const pendingUn=c=>c.unanswered.filter(u=>!sentIds.has(u.id));
+const pendingUn=c=>{const m=c.unanswered.filter(u=>/^Ty\b/.test(u.coach||''));return (m.length||c.unanswered.some(u=>/^Ty\b/.test(u.coach||''))?m:c.unanswered).filter(u=>!sentIds.has(u.id))};
 
 async function load(){
   try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true}
   catch(e){try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
-  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.coaches=c.coaches||[];c.creators=c.creators||[]});render();
+  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.coaches=c.coaches||[];c.creators=c.creators||[];
+    if(c.discord){const ch=c.discord.channels||{},cs=c.discord.coachStats||{},byCh={};
+      c.creators.forEach(x=>{const d=x.channelId&&ch[x.channelId];if(d){x.coach=d.coach;x.responseRate=d.responseRate;x.channel='#'+d.name;byCh[x.channelId]=x}else if(x.coach==='Unassigned'||!c.discordScannedAt){}else x.coach='Unassigned'});
+      c.unanswered.forEach(u=>{const x=byCh[u.channelId];if(x){u.creator=x.name;u.creatorId=x.id}});
+      const names=[...new Set([...Object.keys(cs),...c.creators.map(x=>x.coach)])];
+      c.coaches=names.map(n=>{const un=c.unanswered.filter(u=>u.coach===n);return {name:n,creators:c.creators.filter(x=>x.coach===n).length,medianResponseMin:cs[n]?cs[n].medianResponseMin:null,replies7d:cs[n]?cs[n].replies7d:null,unanswered:un.length,oldestUnansweredMin:un.reduce((m,u)=>Math.max(m,u.waitingMin),0),missedCheckins7d:null,strikes:null}}).sort((a,b)=>b.creators-a.creators)}});render();
 }
 async function act(list){
   if(live){
@@ -132,6 +141,7 @@ function vToday(){
     k(cc?pendingUn(cc).length:0,'CapCut creators waiting on a reply','red')+
     k(S.slack.length+(S.dms||[]).length,'Slack messages and Discord DMs to answer','amb')+
     k(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
+    k(rows.filter(r=>!r.x.inDiscord).length,'In LaunchPoint but not in Discord','blu')+
     k(S.campaigns.reduce((s,c)=>s+(c.role==='cm'?0:c.unanswered.length),0),'Unanswered on oversight campaigns')+
     k(rows.filter(r=>has(r,'cut')).length,'Cut candidates (all campaigns)')+
     k(rows.filter(r=>has(r,'lowviews')).length,'Creators with an account under '+T.lowViews+' avg views','amb')+
@@ -156,18 +166,21 @@ function vToday(){
 function vCapcut(){
   const c=camp('capcut'); if(!c)return '<p class="mute">No CapCut data yet.</p>';
   const rows=c.creators.map(x=>({c,x,f:flags(c,x)})), un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin);
-  let h=`<h2>Needs a response (${pendingUn(c).length})</h2>`;
-  if(!un.length)h+='<p class="mute">Everyone has been answered.</p>';
-  for(const u of un){const done=sentIds.has(u.id);
+  const mine=u=>/^Ty\b/.test(u.coach||''), hasMine=un.some(mine);
+  let h='';
+  for(const [label,list] of hasMine?[['Your creators waiting on you',un.filter(mine)],["Other coaches' creators waiting",un.filter(u=>!mine(u))]]:[['Needs a response',un]]){
+  h+=`<h2>${label} (${list.filter(u=>!sentIds.has(u.id)).length})</h2>`;
+  if(!list.length)h+='<p class="mute">Everyone has been answered.</p>';
+  for(const u of list){const done=sentIds.has(u.id);
     h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span><button class="sm" data-recheck="${esc(u.channel)}">Recheck channel</button></div>
-    <div class="q">${esc(u.message)}</div>
+    ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div>
     <textarea id="d_${esc(u.id)}" ${done?'disabled':''}>${esc(u.draft||'')}</textarea>
-    <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">AI draft · edit before sending</span></div></div>`}
-  const missed=rows.filter(r=>has(r,'missed')&&r.x.inDiscord);
+    <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">${u.draft?'AI draft · edit before sending':'No draft · write a reply or leave it to the coach'}</span></div></div>`}}
+  const missed=rows.filter(r=>has(r,'missed')&&r.x.inDiscord&&r.x.channel);
   h+=`<h2>Missed yesterday — needs a message (${missed.length})</h2>`+bulk('missed',missed,'missed');
-  const scale=rows.filter(r=>has(r,'scale')&&r.x.inDiscord);
+  const scale=rows.filter(r=>has(r,'scale')&&r.x.inDiscord&&r.x.channel);
   h+=`<h2>Under target CPM — offer 5 posts a day (${scale.length})</h2>`+bulk('scale',scale,'scale');
-  const aud={all:rows.filter(r=>r.x.inDiscord),today:rows.filter(r=>r.x.inDiscord&&r.x.postsToday===0)};
+  const aud={all:rows.filter(r=>r.x.inDiscord&&r.x.channel),today:rows.filter(r=>r.x.inDiscord&&r.x.channel&&r.x.postsToday===0)};
   h+=`<h2>Mass message</h2><div class="card"><div class="bar"><label>To <select id="mm_aud"><option value="all">All CapCut creators in Discord (${aud.all.length})</option><option value="today">No post yet today (${aud.today.length})</option></select></label>
   <label>Template <select id="mm_tpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label></div>
   <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button class="pri" id="mm_send">Send to each creator's channel</button><span class="mute" style="font-size:12px">{first} becomes each creator's first name</span></div></div>`;
@@ -182,24 +195,24 @@ function bulk(id,rows,tpl){
 }
 
 function vCoaches(){
-  let h='<p class="mute">Red = breaks a strike rule: median response over 5h, or 7+ missed check-ins in the week.</p>';
+  let h='<p class="mute">Median response = time from a creator message to the next staff reply in their channel, last 7 days. Red = over the 5h strike line.</p>';
   for(const c of S.campaigns){
     h+=`<h2>${esc(c.name)} ${c.role==='cm'?'· you CM':''}</h2><div class="tw"><table><tr><th>Coach</th><th class="n">Creators</th><th class="n">Median response</th><th class="n">Unanswered</th><th class="n">Oldest waiting</th><th class="n">Missed check-ins (7d)</th><th class="n">Strikes</th></tr>
-    ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes}</td></tr>`).join('')}</table></div>`;
+    ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin==null?'mute':k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${k.medianResponseMin==null?'—':wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d??'—'}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes??'—'}</td></tr>`).join('')}</table></div>`;
     if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td></tr>`).join('')}</table></div>`;
   }
   return h;
 }
 
 function vCreators(){
-  const FL=[['all','All'],['missed','Missed yesterday'],['today','No post today'],['nodiscord','Not in Discord'],['lowviews','Low-view accounts'],['cut','Cut candidates'],['scale','Offer 5/day']];
+  const FL=[['all','All'],['missed','Missed yesterday'],['today','No post today'],['noposts','No posts yet'],['health','Red account health'],['nodiscord','Not in Discord'],['lowviews','Low-view accounts'],['cut','Cut candidates'],['scale','Offer 5/day']];
   let rows=all().filter(r=>F.camp==='all'||r.c.id===F.camp);
   const count=k=>k==='all'?rows.length:rows.filter(r=>has(r,k)).length;
   const shown=rows.filter(r=>F.flag==='all'||has(r,F.flag)).sort((a,b)=>b.f.length-a.f.length||(b.x.cpm||0)-(a.x.cpm||0));
   return `<div class="bar"><div class="chips">${[['all','All campaigns'],...S.campaigns.map(c=>[c.id,c.name])].map(([k,l])=>`<span class="tag chip ${F.camp===k?'on':''}" data-fc="${esc(k)}">${esc(l)}</span>`).join('')}</div></div>
   <div class="bar"><div class="chips">${FL.map(([k,l])=>`<span class="tag chip ${F.flag===k?'on':''}" data-ff="${k}">${l} · ${count(k)}</span>`).join('')}</div></div>
-  <div class="tw"><table><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM</th><th class="n">Target</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d posts</th><th class="n">Replies</th><th>Accounts · avg views</th><th>Flags</th></tr>
-  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate==null?"—":x.responseRate+"%"}</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews<T.lowViews?'red':''}" title="${esc(a.handle)}">${esc(a.platform.slice(0,2))} ${a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="mute">Nobody matches.</td></tr>'}</table></div>
+  <div class="tw"><table><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM</th><th class="n">Target</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d posts</th><th class="n">Replies</th><th>Accounts</th><th>Flags</th></tr>
+  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate==null?"—":x.responseRate+"%"}</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews!=null?(a.avgViews<T.lowViews?'red':''):({red:'red',amber:'amb',green:'grn'}[a.health]||'')}" title="${esc(a.handle)}${a.health?' · health '+a.health:''}">${esc(a.platform.slice(0,2))}${a.avgViews!=null?' '+(a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews):''}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="mute">Nobody matches.</td></tr>'}</table></div>
   <h2>Cut rules</h2><div class="card"><div class="bar">
   <label>CPM above <input class="thr num" data-t="cutCpmMult" type="number" step="0.1" value="${T.cutCpmMult}" style="width:70px">× campaign target</label>
   <label>Reply rate below <input class="thr num" data-t="minResp" type="number" value="${T.minResp}" style="width:70px">%</label>
@@ -223,7 +236,7 @@ function vAudits(){
 
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
 async function sendTo(ids,text){
-  const list=ids.map(cx).filter(x=>x&&x.inDiscord).map(x=>({type:'discord_send',campaign:'capcut',creator:x.name,channel:x.channel,text:fill(text,x.name)}));
+  const list=ids.map(cx).filter(x=>x&&x.inDiscord).map(x=>({type:'discord_send',campaign:'capcut',creator:x.name,channel:x.channel,channelId:x.channelId||null,text:fill(text,x.name)}));
   if(!list.length||!text.trim())return toast('Nothing to send');
   if(await act(list)){toast(`Queued ${list.length} message${list.length>1?'s':''}`+(live?'':' (preview: not sent)'));render()}
 }
@@ -234,9 +247,9 @@ document.addEventListener('click',async e=>{
   else if(d.recheck){if(await act([{type:'rescan',scope:'capcut:'+d.recheck}]))toast('Rechecking '+d.recheck);render()}
   else if(d.reply){const u=camp('capcut').unanswered.find(x=>x.id===d.reply), text=$('#d_'+CSS.escape(d.reply)).value;
     if(!text.trim())return toast('Write a reply first');
-    if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}
+    if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,channelId:u.channelId||null,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}
   else if(d.bulk){sendTo([...document.querySelectorAll('.pick_'+d.bulk+':checked')].map(i=>i.value),$('#bt_'+d.bulk).value)}
-  else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&(a==='all'||x.postsToday===0)).map(x=>x.id),$('#mm_text').value)}
+  else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&x.channel&&(a==='all'||x.postsToday===0)).map(x=>x.id),$('#mm_text').value)}
   else if(d.cancel){if(live){await fetch('api/actions/'+d.cancel,{method:'DELETE'});await load()}}
   else if(d.fc){F.camp=d.fc;render()}
   else if(d.ff){F.flag=d.ff;render()}

@@ -90,7 +90,7 @@ app.post('/api/actions', (req, res) => {
     if (a.type === 'discord_send' && (a.campaign !== 'capcut' || !a.channel || !String(a.text || '').trim()))
       return res.status(400).json({ error: 'discord_send needs campaign=capcut, channel and text' });
     out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
-      channel: a.channel || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
+      channel: a.channel || null, channelId: a.channelId || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
   }
   writeJson(QUEUE, q.concat(out)); res.json(out);
 });
