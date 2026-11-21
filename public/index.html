@@ -65,7 +65,7 @@ const TEMPLATES={
   custom:{label:'Custom…',text:''}
 };
 let lastFire=null;
-const fireMsg=()=>!live?'Rescan queued (preview)':lastFire&&lastFire.fired?'Scan started on the Mac Mini. Results in about 10 minutes.':lastFire&&lastFire.why==='not configured'?'Queued. Instant refresh is not connected yet, so it runs at the next scheduled scan.':'Queued: '+(lastFire?lastFire.why:'waiting for next scan');
+const fireMsg=(quick)=>!live?'Rescan queued (preview)':lastFire&&lastFire.fired?(quick?'Recheck started on the Mac Mini. About 2 minutes.':'Scan started on the Mac Mini. Results in about 10 minutes.'):lastFire&&lastFire.why==='not configured'?'Queued. Instant refresh is not connected yet, so it runs at the next scheduled scan.':'Queued: '+(lastFire?lastFire.why:'waiting for next scan');
 let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set();
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
@@ -178,7 +178,7 @@ function vCapcut(){
   h+=`<h2>${label} (${list.filter(u=>!sentIds.has(u.id)).length})</h2>`;
   if(!list.length)h+='<p class="mute">Everyone has been answered.</p>';
   for(const u of list){const done=sentIds.has(u.id);
-    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span><button class="sm" data-recheck="${esc(u.channel)}">Recheck channel</button></div>
+    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}">Recheck channel</button>`:""}</div>
     ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div>
     <textarea id="d_${esc(u.id)}" ${done?'disabled':''}>${esc(u.draft||'')}</textarea>
     <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">${u.draft?'AI draft · edit before sending':'No draft · write a reply or leave it to the coach'}</span></div></div>`}}
@@ -205,7 +205,7 @@ function vCoaches(){
   for(const c of S.campaigns){
     h+=`<h2>${esc(c.name)} ${c.role==='cm'?'· you CM':''}</h2><div class="tw"><table><tr><th>Coach</th><th class="n">Creators</th><th class="n">Median response</th><th class="n">Unanswered</th><th class="n">Oldest waiting</th><th class="n">Missed check-ins (7d)</th><th class="n">Strikes</th></tr>
     ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin==null?'mute':k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${k.medianResponseMin==null?'—':wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d??'—'}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes??'—'}</td></tr>`).join('')}</table></div>`;
-    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td></tr>`).join('')}</table></div>`;
+    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th><th></th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td><td>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck</button>`:''}</td></tr>`).join('')}</table></div>`;
   }
   return h;
 }
@@ -230,7 +230,7 @@ function vCreators(){
 function vSlack(){
   const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
   const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0));
-  return '<h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+((S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
+  return '<div class="bar"><button class="sm" data-rescan="dms">↻ Recheck DMs</button><button class="sm" data-rescan="slack">↻ Recheck Slack</button></div><h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+((S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
 }
 function vSlackList(){
   return S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span><span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span><span style="flex:1"></span>${m.url?`<a href="${esc(m.url)}" style="color:var(--blu)">Open in Slack</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`).join('');
@@ -249,8 +249,8 @@ async function sendTo(ids,text){
 document.addEventListener('click',async e=>{
   const t=e.target, d=t.dataset||{};
   if(t.id==='refresh'){if(await act([{type:'rescan',scope:'all'}]))toast(fireMsg());render()}
-  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast(fireMsg());render()}
-  else if(d.recheck){if(await act([{type:'rescan',scope:'capcut:'+d.recheck}]))toast(fireMsg());render()}
+  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast(fireMsg(d.rescan==='dms'||d.rescan==='slack'));render()}
+  else if(d.recheck){if(await act([{type:'rescan',scope:'channel:'+(d.camp||'capcut')+':'+d.recheck}]))toast(fireMsg(1));render()}
   else if(d.reply){const u=camp('capcut').unanswered.find(x=>x.id===d.reply), text=$('#d_'+CSS.escape(d.reply)).value;
     if(!text.trim())return toast('Write a reply first');
     if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,channelId:u.channelId||null,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}

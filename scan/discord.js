@@ -1,4 +1,6 @@
 // Discord scan. Run in a discord.com tab (Claude in Chrome, Mac Mini). Read-only: opens channels and reads the DOM.
+// Optional scope, set before running: window.__discScope = {mode:'all'} (default) | {mode:'campaign', key:'capcut'} |
+//   {mode:'channel', key:'capcut', channelId:'123'} | {mode:'dms'}.
 // Starts in the background; poll window.__disc.progress until window.__disc.done is true.
 // Then read window.__disc.mine (Ty's CapCut creators waiting), and call window.discSubmit(drafts, acks, TOKEN):
 //   drafts = {"#channel-name": "reply text"}, acks = ["#channel-name", ...] (messages that need no reply).
@@ -10,7 +12,9 @@
     'Team Van Gogh': 'Ryan Soto', 'Mat': 'Mathew Wu', 'Eric': 'Eric Liang', 'Grace': 'Grace Goldstein', 'Anna': 'Anna Florek', 'Baraa': 'Baraa Alrash' };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const go = p => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); };
-  const D = window.__disc = { done: false, progress: 'starting', errors: [], campaigns: [], dms: [], mine: [] };
+  const SC = window.__discScope || { mode: 'all' };
+  const STAFF = /^(Ty M|Amrin|Dakota|Reece|yan\b|Razeen|Joseph|matwu|Eric|Grace|baroobi|Anna)/i; // used when only one channel is read
+  const D = window.__disc = { done: false, progress: 'starting', errors: [], campaigns: [], dms: null, mine: [], channelUpdates: null, scope: SC };
 
   async function sidebar() {
     const sc = document.querySelector('#channels'); if (!sc) throw new Error('channel list not found');
@@ -47,12 +51,12 @@
   }
   const clean = a => a.split('\n')[0].replace(/,\s*$/, '').trim(), isBot = m => m.b || /\bAPP\b/.test(m.a);
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
-  function analyze(chans) {
+  function analyze(chans, staffRe) {
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
     const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, un = [], channels = {}, rt = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ a: clean(m.a), t: +new Date(m.t), x: m.x, st: staff.has(clean(m.a)) })), runs = [];
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1 }); }
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
@@ -68,7 +72,16 @@
     return { coachStats, channels, unanswered: un };
   }
   (async () => {
-    for (const [key, g, re] of GUILDS) {
+    if (SC.mode === 'channel') {
+      try {
+        const G = GUILDS.find(x => x[0] === SC.key); if (!G || !/^\d+$/.test(String(SC.channelId))) throw new Error('bad channel scope');
+        go(`/channels/${G[1]}`); await sleep(3000);
+        const msgs = await read(`/channels/${G[1]}/${SC.channelId}`, SC.channelId), name = ((document.title.match(/#([^ |]+)/) || [])[1] || 'channel');
+        const r = analyze([{ id: SC.channelId, name, cat: '', msgs }], STAFF);
+        D.channelUpdates = [{ campaign: SC.key, channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
+      } catch (e) { D.errors.push('channel: ' + e); }
+    }
+    for (const [key, g, re] of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key))) {
       try {
         go(`/channels/${g}`); await sleep(3500);
         const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && re.test(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
@@ -77,7 +90,7 @@
         D.campaigns.push({ id: key, discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
       } catch (e) { D.errors.push(key + ': ' + e); }
     }
-    try {
+    if (SC.mode === 'all' || SC.mode === 'dms') try {
       D.progress = 'dms'; go('/channels/@me'); await sleep(3000);
       const links = [...document.querySelectorAll('a[href^="/channels/@me/"]')].map(a => ({ id: a.getAttribute('href').split('/').pop(), label: (a.getAttribute('aria-label') || a.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80) })).filter(x => /^\d+$/.test(x.id)).slice(0, 20);
       const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ a: clean(m.a), t: m.t, x: m.x })).slice(-8) });
@@ -86,14 +99,15 @@
       D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me) return null; let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
         return { id: r.id, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
     } catch (e) { D.errors.push('dms: ' + e); }
-    const cc = D.campaigns.find(c => c.id === 'capcut');
-    D.mine = cc ? cc.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : [];
+    const cc = D.campaigns.find(c => c.id === 'capcut'), one = D.channelUpdates && SC.key === 'capcut' && D.channelUpdates[0] && D.channelUpdates[0].item;
+    D.mine = one ? [one].filter(u => !u.ack).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : cc ? cc.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : [];
     D.progress = 'done'; D.done = true;
   })();
   window.discSubmit = (drafts, acks, token) => {
     const D = window.__disc;
     for (const c of D.campaigns) { c.unanswered.forEach(u => { if ((acks || []).includes(u.channel)) u.ack = true; if (c.id === 'capcut' && drafts && drafts[u.channel]) u.draft = drafts[u.channel]; }); c.unanswered = c.unanswered.filter(u => !u.ack).map(({ ack, ...u }) => u); }
-    const payload = { campaigns: D.campaigns, dms: D.dms, scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
+    for (const cu of D.channelUpdates || []) if (cu.item) { if ((acks || []).includes(cu.item.channel)) cu.item = null; else { if (drafts && drafts[cu.item.channel]) cu.item.draft = drafts[cu.item.channel]; delete cu.item.ack; } }
+    const payload = { campaigns: D.campaigns, ...(D.dms ? { dms: D.dms } : {}), ...(D.channelUpdates ? { channelUpdates: D.channelUpdates } : {}), ...(D.scope.mode !== 'all' ? { completeRescans: true } : {}), scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
     const f = document.createElement('form'); f.method = 'POST'; f.action = 'https://gigca-cm-portal-production.up.railway.app/api/runner/ingest-form'; f.style.display = 'none';
     for (const [k, v] of [['token', token], ['payload', JSON.stringify(payload)]]) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); setTimeout(() => f.submit(), 300); return 'submitting ' + JSON.stringify(payload).length + ' bytes';
