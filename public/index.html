@@ -90,10 +90,11 @@ function flags(c,x){
   const low=(x.accounts||[]).filter(a=>a.avgViews!=null&&a.avgViews<T.lowViews);
   if(low.length)f.push({k:'lowviews',t:'Low-view account: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
   const cut=[];
+  if(!posted&&x.daysOnCampaign>5)cut.push('no first post in '+x.daysOnCampaign+' days');
   if(x.cpm!=null&&x.posts7d>=5&&x.cpm>c.targetCpm*T.cutCpmMult)cut.push('CPM '+money(x.cpm));
   if(x.responseRate!=null&&x.responseRate<T.minResp)cut.push('replies '+x.responseRate+'%');
   const exp=x.expectedPerDay*Math.min(7,x.daysOnCampaign||7);
-  if(x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
+  if(posted&&x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
   if(cut.length)f.push({k:'cut',t:'Cut? '+cut.join(', '),c:'red'});
   if(x.cpm!=null&&x.cpm<c.targetCpm&&x.postsYesterday>=x.expectedPerDay)f.push({k:'scale',t:'Under target CPM · offer 5/day',c:'grn'});
   return f;
@@ -148,13 +149,14 @@ function vToday(){
     k(rows.filter(r=>has(r,'scale')).length,'Ready for 5/day','grn')+'</div><h2>Cohort performance today</h2><div class="cards">';
   for(const c of S.campaigns){
     const posted=c.creators.filter(x=>x.postsToday>0).length, posts=c.creators.reduce((s,x)=>s+x.postsToday,0), exp=c.creators.length*c.expectedPerDay;
-    const missed=c.creators.filter(x=>x.postsYesterday===0).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
+    const missed=c.creators.filter(x=>x.everPosted!==false&&x.postsYesterday===0).length, never=c.creators.filter(x=>x.everPosted===false).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
     const bars=c.postsByDay?c.postsByDay.map(d=>d.posts):(c.postsByHourToday||[]), mx=Math.max(1,...bars.map(n=>n||0));
     h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Oversight'}</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻</button></h3>
     <div class="row"><span>CPM (7d) vs target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
     <div class="row"><span>Creators posted today</span><b class="num">${posted} / ${c.creators.length}</b></div>
     <div class="row"><span>Posts today vs expected</span><b class="num">${posts} / ${exp}</b></div>
     <div class="row"><span>Missed yesterday</span><b class="num ${missed?'red':''}">${missed}</b></div>
+    <div class="row"><span>Active but never posted</span><b class="num">${never}</b></div>
     <div class="row"><span>Unanswered creators</span><b class="num ${c.unanswered.length?'amb':''}">${c.discordScannedAt||S.sample?c.unanswered.length+(old?` · oldest ${wait(old)}`:''):'not scanned'}</b></div>
     <div class="row"><span>Not in Discord</span><b class="num">${c.creators.filter(x=>!x.inDiscord).length}</b></div>
     <div class="spark" title="${c.postsByDay?c.postsByDay.map(d=>d.date.slice(5)+': '+d.posts).join(' · '):'Posts per hour today'}">${bars.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):3}%"></i>`).join('')}</div>
@@ -224,7 +226,7 @@ function vCreators(){
 function vSlack(){
   const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
   const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0));
-  return '<h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+(S.slackScanned||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
+  return '<h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+((S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
 }
 function vSlackList(){
   return S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span><span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span><span style="flex:1"></span>${m.url?`<a href="${esc(m.url)}" style="color:var(--blu)">Open in Slack</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`).join('');
