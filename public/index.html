@@ -566,13 +566,21 @@ const kpi=(v,l,cls='')=>`<div class="kpi"><div class="v ${cls}">${v}</div><div c
 // Score = share of SOP checks the coach passes in the chosen timeframe (a "watch" counts half; no-data checks are left out).
 // Strikes = this week's strike risks (strike rules are judged on 7 days). Ranked best first.
 const OPENR=new Set();
+let RCAMP='all'; // all | group | <campaign id>
 function coachRanking(){
   const rows=[];CAMPS.forEach(k=>{const c=camp(k);if(c)c.coachNames.forEach(n=>{const a=fullAudit(c,n),w=TF==='7d'?a:fullAudit(c,n,'7d'),g=a.all.filter(x=>x.state!=='na'),ok=g.filter(x=>x.state==='ok').length,wn=g.filter(x=>x.state==='warn').length;
     rows.push({c,a,strikes:w.strikes,score:g.length?Math.round((ok+wn/2)/g.length*100):null,ok,graded:g.length})})});
   rows.sort((x,y)=>(y.score??-1)-(x.score??-1)||x.strikes.length-y.strikes.length||x.a.bad-y.a.bad||x.a.name.localeCompare(y.a.name));
-  let h=`<div class="bar" style="margin-top:26px"><h2 style="margin:0">Coach ranking <span class="sub">${rows.length?plural(rows.length,'coach')+' · best first':'no coaches yet'}</span></h2><span class="sp"></span>${tfSeg()}</div>`;
-  if(!rows.length)return h+'<div class="empty">No coach data yet.</div>';
-  return h+`<div class="list">${rows.map((r,i)=>{const {c,a}=r,key=c.id+'|'+a.name,open=OPENR.has(key),col=r.score==null?'var(--t3)':r.score>=85?'var(--grn)':r.score>=60?'var(--amb)':'var(--red)',ns=r.strikes.length,msg=coachMsg(a),fix=a.all.filter(k=>k.state==='bad'),watch=a.all.filter(k=>k.state==='warn');
+  const camps=CAMPS.filter(k=>rows.some(r=>r.c.id===k)), mode=RCAMP==='all'||RCAMP==='group'||camps.includes(RCAMP)?RCAMP:'all';
+  const seg=`<div class="seg">${[['all','Everyone'],['group','By campaign'],...camps.map(k=>[k,NAMES[k]])].map(([k,l])=>`<span class="${mode===k?'on':''}" data-rcamp="${k}">${esc(l)}${k!=='all'&&k!=='group'?`<i>${rows.filter(r=>r.c.id===k).length}</i>`:''}</span>`).join('')}</div>`;
+  const shown=mode==='all'||mode==='group'?rows:rows.filter(r=>r.c.id===mode);
+  let h=`<div class="bar" style="margin-top:26px"><h2 style="margin:0">Coach ranking <span class="sub">${shown.length?plural(shown.length,'coach')+' · best first':'no coaches yet'}</span></h2><span class="sp"></span>${tfSeg()}</div><div class="bar">${seg}</div>`;
+  if(!shown.length)return h+'<div class="empty">No coach data yet.</div>';
+  if(mode==='group')return h+camps.map(k=>`<h2 style="margin:18px 0 8px">${esc(NAMES[k])} <span class="sub">${plural(rows.filter(r=>r.c.id===k).length,'coach')}</span></h2>${rankList(rows.filter(r=>r.c.id===k))}`).join('');
+  return h+rankList(shown);
+}
+function rankList(rows){
+  return `<div class="list">${rows.map((r,i)=>{const {c,a}=r,key=c.id+'|'+a.name,open=OPENR.has(key),col=r.score==null?'var(--t3)':r.score>=85?'var(--grn)':r.score>=60?'var(--amb)':'var(--red)',ns=r.strikes.length,msg=coachMsg(a),fix=a.all.filter(k=>k.state==='bad'),watch=a.all.filter(k=>k.state==='warn');
     return `<div class="rank ${open?'open':''}"><div class="rhead" data-rank="${esc(key)}"><span class="rk ${i<3&&r.score!=null&&!ns?'top':''}">${i+1}</span>
       <div style="min-width:0"><div class="rname">${esc(a.name)}<span>${esc(c.name)} · ${plural(a.cr.length,'creator')}</span></div>
       <div class="rbar"><span class="tr"><i style="width:${r.score??0}%;background:${col}"></i></span><b style="color:${col}">${r.score==null?'—':r.score+'%'}</b><span class="faint">${r.graded?`${r.ok}/${r.graded} on track${fix.length?` · <span class="red">${fix.length} to fix</span>`:''}`:'no data yet'}</span></div></div>
@@ -916,7 +924,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
@@ -930,6 +938,7 @@ document.addEventListener('click',async e=>{
     if(!live){localQueue=localQueue.filter(a=>sc?a.type!=='rescan':a.type==='rescan');toast('Cleared (preview)');return render()}
     try{const r=await fetch('api/actions/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:d.clearq,campaign:d.camp||null})}),j=await r.json();if(!r.ok)throw new Error(j.error);
       toast(sc?(j.cancelled?`Cancelled ${plural(j.cancelled,'waiting scan')}`:'No scans were waiting'):`Queue cleared · ${j.cancelled} cancelled, ${j.removed} removed`);if(sc)$('#menu').classList.remove('on');await load()}catch(e){toast('Failed: '+e.message)}}
+  else if(d.rcamp){RCAMP=d.rcamp;render()}
   else if(d.cof){COF=d.cof;render()}
   else if(d.rank){OPENR.has(d.rank)?OPENR.delete(d.rank):OPENR.add(d.rank);render()}
   else if(d.sendcoach){const it=(S.coachItems||[]).find(x=>x.id===d.sendcoach),ta=$('#d_'+CSS.escape(d.sendcoach)),text=ta?ta.value:'';
