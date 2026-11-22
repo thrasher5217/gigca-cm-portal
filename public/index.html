@@ -78,7 +78,7 @@ input[type=checkbox]{accent-color:var(--acc2);width:15px;height:15px;vertical-al
 .seg{display:inline-flex;background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;flex-wrap:wrap}
 .seg span{padding:4px 10px;border-radius:7px;color:var(--t2);cursor:pointer;font-weight:500;font-size:12.5px;user-select:none;white-space:nowrap}
 .seg span:hover{color:var(--text)}.seg span.on{background:var(--s3);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.2)}
-.seg span i{font-style:normal;color:var(--t3);margin-left:5px;font-variant-numeric:tabular-nums}
+.seg span i{font-style:normal;color:var(--t3);margin-left:5px;font-variant-numeric:tabular-nums}.seg span i.red{color:var(--red);font-weight:600}
 
 /* surfaces */
 .card{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
@@ -165,6 +165,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
   .brand,.foot,.navsec{display:none}nav a{white-space:nowrap}
   .top,.wrap{padding-left:16px;padding-right:16px}.prog{margin:14px 16px 0}
   .ci ul{columns:1}
+  .pillinfo{white-space:normal}
 }
 </style>
 </head>
@@ -639,16 +640,19 @@ function vNew(c){
 }
 
 function vInbox(c){
-  const un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin), old=un.reduce((m,u)=>Math.max(m,u.waitingMin),0);
   if(!c.discordScannedAt&&!S.sample)return '<div class="empty">Discord has not been scanned for this campaign yet.</div>';
-  let h='<div class="kpis">'+kpi(un.length,'Creators waiting on a reply',un.length?'amb':'')+kpi(old?wait(old):'—','Longest wait',waitCls(old))+kpi(un.filter(u=>u.waitingMin>=900).length,'Over 15h (SOP limit)',un.some(u=>u.waitingMin>=900)?'red':'')+kpi(un.filter(u=>u.waitingMin>=300).length,'Over 5h')+'</div><p class="lede" style="margin-top:12px">Auditing only: replies go through the coach.</p>';
-  const rd=readSection(c.readUn||[],unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
-  if(!un.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
-  for(const coach of [...new Set(un.map(u=>u.coach||'Unassigned'))]){
-    const list=un.filter(u=>(u.coach||'Unassigned')===coach);
-    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel,c,u)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
-  }
-  return h+rd;
+  const co=u=>u.coach||'Unassigned', all=c.unanswered, late=u=>u.waitingMin>=900;
+  const coaches=[...c.coachNames.filter(n=>all.some(u=>co(u)===n)),...c.coachNames.filter(n=>!all.some(u=>co(u)===n)),...(all.some(u=>co(u)==='Unassigned')?['Unassigned']:[])];
+  const cur=WHO[c.id]&&(WHO[c.id]==='all'||coaches.includes(WHO[c.id]))?WHO[c.id]:'all';
+  const n=k=>all.filter(u=>k==='all'||co(u)===k), seg=`<div class="seg">${[['all','Everyone'],...coaches.map(k=>[k,k==='Unassigned'?'Unassigned':first(k)])].map(([k,l])=>{const w=n(k),x=w.filter(late).length;return `<span class="${cur===k?'on':''}" data-who="${esc(k)}" data-wc="${c.id}" title="${w.length} waiting${x?`, ${x} over 15h`:''}">${esc(l)}<i class="${x?'red':''}">${w.length}</i></span>`}).join('')}</div>`;
+  let h=`<div class="bar">${seg}<span class="sp"></span><label class="hint">Sort <select id="sortsel">${[['wait','Longest waiting'],['new','Newest first'],['name','Name']].map(([k,l])=>`<option value="${k}" ${SORT===k?'selected':''}>${l}</option>`).join('')}</select></label></div>`;
+  const list=n(cur).sort((a,b)=>SORT==='name'?String(a.creator).localeCompare(b.creator):SORT==='new'?a.waitingMin-b.waitingMin:b.waitingMin-a.waitingMin);
+  const rd=readSection((c.readUn||[]).filter(u=>cur==='all'||co(u)===cur),unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(co(u))}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
+  if(!list.length)return h+`<div class="empty">${cur==='all'?'Everyone has been answered.':esc(first(cur))+' has answered everyone.'}</div>`+rd;
+  const over=list.filter(late).length, old=list[0]&&Math.max(...list.map(u=>u.waitingMin));
+  h+=`<p class="lede">${plural(list.length,'creator')} waiting on ${cur==='all'?'a coach':esc(first(cur))}${over?`, <span class="red">${over} over 15h (SOP limit)</span>`:''} · longest ${wait(old)}. Auditing only: replies go through the coach.</p><div class="list">`;
+  for(const u of list)h+=`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(co(u))}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel,c,u)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`;
+  return h+'</div>'+rd;
 }
 
 const CHECKCOLS=[['reply','15h replies'],['median','Median <5h'],['checkins','Check-ins'],['contact','New 24h'],['posted','Posting'],['volume','Volume'],['idle','3-day idle'],['cpm','CPM'],['warm','Warm-up'],['first','Day 5'],['quiet','48h contact']];
