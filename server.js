@@ -175,7 +175,7 @@ app.use(userAuth);
 // Messages you marked as read. The key names the exact message (channel + its latest message time + a hash of the text),
 // so a new message from the same person gets a new key and shows up as unread again.
 const READ = path.join(DATA_DIR, 'read.json');
-app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}), read: readJson(READ, {}) }));
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}), read: readJson(READ, {}), schedule: SCHEDULE }));
 app.post('/api/read', (req, res) => {
   const b = req.body || {}, key = String(b.key || '');
   if (!key || key.length > 300) return res.status(400).json({ error: 'key required' });

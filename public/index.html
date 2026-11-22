@@ -475,6 +475,32 @@ function noteSendChanges(){
   (S.queue||[]).filter(a=>a.live).forEach(a=>{const was=sendSeen[a.id];if(was&&was!==a.status){if(a.status==='done')toast('Sent to '+(a.channel||'Discord'));else if(a.status==='failed')toast('Send failed: '+(a.detail||'').slice(0,80))}sendSeen[a.id]=a.status});
 }
 
+/* ---------- scan schedule (the server's: full checks at :43 past these hours, Chicago time) ---------- */
+const SCHED=()=>S.schedule||{tz:'America/Chicago',hours:[8,11,14,17,20,23],minute:43};
+const tzParts=(t,tz)=>Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));
+// The next slot: step hour by hour through times whose local minute is the slot minute (the zone's offset is whole hours).
+function nextScan(now=Date.now()){
+  const sc=SCHED();let t=Math.ceil(now/6e4)*6e4;
+  for(let i=0;i<60*49;i++,t+=6e4){const p=tzParts(t,sc.tz);if(+p.minute!==sc.minute)continue;if(sc.hours.includes(+p.hour))return t;t+=59*6e4;i+=59}
+  return null;
+}
+// A slot that came round in the last 90 minutes but hasn't run yet (the Mac Mini claims it when it next checks in).
+function dueScan(now=Date.now()){
+  const sc=SCHED(),rn=S.runner||{};
+  for(let m=0;m<=90;m++){const t=now-m*6e4,p=tzParts(t,sc.tz);if(+p.minute===sc.minute&&sc.hours.includes(+p.hour)){const slot=`${p.year}-${p.month}-${p.day} ${p.hour}:${String(sc.minute).padStart(2,'0')}`;return rn.lastSlot===slot?null:t}}
+  return null;
+}
+function nextPill(){
+  if(!live)return '';
+  const running=(S.queue||[]).some(a=>a.type==='rescan'&&a.status==='running'&&a.source==='schedule');
+  if(running)return '<span class="pillinfo">Scheduled scan <b>running now</b></span>';
+  const off=runnerAge()==null||runnerAge()>2, due=dueScan();
+  if(due)return `<span class="pillinfo" title="The Mac Mini starts it when it next checks in">Scheduled scan <b>due now</b>${off?' · Mac Mini offline':''}</span>`;
+  const t=nextScan(); if(!t)return '';
+  const tm=new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), tmr=new Date(t).toDateString()!==new Date().toDateString();
+  return `<span class="pillinfo" title="Full checks run at ${SCHED().hours.map(h=>(h%12||12)+':'+String(SCHED().minute).padStart(2,'0')+(h<12?' AM':' PM')).join(', ')} Central time">Next scan <b>${tmr?'tomorrow ':''}${esc(tm)}</b> · in ${wait(Math.max(1,Math.round((t-Date.now())/6e4)))}${off?' · Mac Mini offline':''}</span>`;
+}
+
 /* ---------- scan history ---------- */
 function describeScope(s,c){
   s=s||'all';
@@ -507,6 +533,7 @@ function render(){
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   const ls=lastScans();
   $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, all four Discords, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
+    nextPill()+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
   $('#banner').innerHTML=offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
   $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
