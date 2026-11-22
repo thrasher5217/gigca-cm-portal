@@ -43,7 +43,7 @@ const RUNNER = path.join(DATA_DIR, 'runner.json'); // Mac Mini heartbeat + last 
 // parts:lp.capcut,dc.artlist,slack (lp = LaunchPoint analytics, dc = Discord messages, for that campaign).
 const CAMPS = ['capcut', 'artlist', 'creatify', 'melius', 'yri'];
 const MINE = ['capcut', 'yri']; // campaigns where Ty is the coach: replies can be sent from the portal
-const SENDABLE = [...MINE, 'coaches']; // plus his replies in the Launchpoint Coaches server
+const SENDABLE = [...CAMPS, 'coaches']; // live replies Ty sends himself: his creators, @tags of him in any campaign, the coaches server
 // Messages queued before sending was turned on were never meant to go out: cancel them once so they can't be sent by surprise.
 { const q = getQueue(); let n = 0;
   q.forEach(a => { if (a.type === 'discord_send' && a.status === 'pending' && !a.live) { a.status = 'cancelled'; a.detail = 'queued before sending was turned on'; n++; } });
@@ -122,7 +122,7 @@ app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
   if (a.type === 'discord_send' && a.status === 'done' && a.channelId) {
     const st = readJson(STATE, null), c = st && (st.campaigns || []).find(x => x.id === a.campaign);
     if (st && a.campaign === 'coaches' && st.coaches) { st.coaches.items = (st.coaches.items || []).filter(it => it.channelId !== a.channelId); writeJson(STATE, st); }
-    if (c) { c.unanswered = (c.unanswered || []).filter(u => u.channelId !== a.channelId);
+    if (c) { c.unanswered = (c.unanswered || []).filter(u => u.channelId !== a.channelId); c.tagged = (c.tagged || []).filter(u => u.channelId !== a.channelId);
       const ch = c.discord && c.discord.channels && c.discord.channels[a.channelId]; if (ch) ch.lastStaffMsgAt = a.finishedAt;
       writeJson(STATE, st); }
   }
@@ -157,6 +157,7 @@ function mergeState(inc) {
     const known = ((c.discord || {}).channels || {})[u.channelId] || {};
     if (u.guildId && !c.guildId) c.guildId = u.guildId;
     c.unanswered = (c.unanswered || []).filter(x => x.channelId !== u.channelId);
+    if (u.tagged !== undefined) { c.tagged = (c.tagged || []).filter(x => x.channelId !== u.channelId); if (u.tagged) c.tagged.push({ ...u.tagged, coach: known.coach || u.tagged.coach || '', channel: known.name ? '#' + known.name : u.tagged.channel }); }
     if (u.item) c.unanswered.push({ ...u.item, coach: known.coach || u.item.coach || '', channel: known.name ? '#' + known.name : u.item.channel });
     if (u.info && c.discord && c.discord.channels) c.discord.channels[u.channelId] = { ...known, ...u.info, name: known.name || u.info.name, cat: known.cat || u.info.cat, coach: known.coach || u.info.coach };
   }
@@ -199,7 +200,7 @@ app.post('/api/actions', async (req, res) => {
   for (const a of list) {
     if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
     // Sending is only for Ty's own campaigns (CapCut, YRI); every other campaign is oversight.
-    if (a.type === 'discord_send' && (!SENDABLE.includes(a.campaign) || (a.campaign === 'coaches' && a.live !== true) || !a.channel || !String(a.text || '').trim()))
+    if (a.type === 'discord_send' && (!SENDABLE.includes(a.campaign) || (!MINE.includes(a.campaign) && a.live !== true) || !a.channel || !String(a.text || '').trim()))
       return res.status(400).json({ error: 'discord_send needs campaign capcut, yri or coaches, a channel and text' });
     // live = really sent by the Mac Mini (replies). Without it the message only waits in the queue, as bulk messages always have.
     const live = a.type === 'discord_send' && a.live === true;

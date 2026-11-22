@@ -109,12 +109,18 @@
   function analyze(chans, staffRe, opt) {
     opt = opt || {};
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
-    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {}, acks = {};
+    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], tagged = [], channels = {}, rt = {}, wins = {}, resp = {}, acks = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, r: m.r, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; L.ms.push(m); } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id, ms: [m] }); }
       hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
+      // Someone wrote @Ty in this channel since Ty last spoke or reacted here: it's waiting on Ty himself, whoever the coach is.
+      let lastTyI = -1; hs.forEach((m, i) => { if (isTyName(m.a) || m.me) lastTyI = i; });
+      const tagI = hs.findIndex((m, i) => i > lastTyI && !isTyName(m.a) && /@Ty\b|@tym0559/i.test(m.x) && now - m.t < 7 * 864e5);
+      if (tagI >= 0) { const tm = hs[tagI], rest = hs.slice(tagI);
+        tagged.push({ id: c.id + '-t' + tm.t, channelId: c.id, messageId: tm.id || null, startAt: new Date(tm.t).toISOString(), lastAt: new Date(rest[rest.length - 1].t).toISOString(), channel: '#' + c.name, coach, creator: tm.a,
+          waitingMin: Math.round((now - tm.t) / 6e4), message: rest.map(m => (rest.length > 1 ? m.a + ': ' : '') + m.x).join('\n').slice(0, 600), context: (hs.slice(0, tagI).filter(m => m.st).pop() || { x: '' }).x.slice(-300), tagged: true }); }
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
       // Response time: from the first creator message that needs a reply to the next coach message. Runs that are only
@@ -139,7 +145,7 @@
     Object.keys(resp).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).resp = resp[k].sort((a, b) => a[0] - b[0]).slice(-3000));
     Object.keys(acks).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).acks = acks[k].slice(-3000));
     Object.keys(wins).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkins = [...wins[k]].sort());
-    return { coachStats, channels, unanswered: un };
+    return { coachStats, channels, unanswered: un, tagged };
   }
   (async () => {
     if (SC.mode === 'channel') {
@@ -150,7 +156,7 @@
         go(`/channels/${gid}`); await sleep(3000);
         const msgs = await read(`/channels/${gid}/${SC.channelId}`, SC.channelId), name = ((document.title.match(/#([^ |]+)/) || [])[1] || 'channel');
         const r = analyze([{ id: SC.channelId, name, cat: '', msgs }], STAFF, G[3]);
-        D.channelUpdates = [{ campaign: SC.key, guildId: gid, channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
+        D.channelUpdates = [{ campaign: SC.key, guildId: gid, channelId: SC.channelId, item: r.unanswered[0] || null, tagged: r.tagged[0] || null, info: r.channels[SC.channelId] || null }];
       } catch (e) { D.errors.push('channel: ' + e); }
     }
     for (const G of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
@@ -170,7 +176,7 @@
         const list = sb.filter(x => !x.isCat && cats.includes(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
         for (const ch of list) { D.progress = `${key} ${chans.length}/${list.length}`; chans.push({ id: ch.id, name: ch.name.replace(/ \(.*$/, '').replace(/^unread, /, ''), cat: ch.catName, msgs: await read(`/channels/${g}/${ch.id}`, ch.id).catch(() => []) }); }
         const r = opt ? analyze(chans, STAFF, { ...opt, freq: true }) : analyze(chans);
-        D.campaigns.push({ id: key, guildId: g, ...(opt ? { name: opt.name, role: opt.role, discordCategories: cats } : {}), discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
+        D.campaigns.push({ id: key, guildId: g, ...(opt ? { name: opt.name, role: opt.role, discordCategories: cats } : {}), discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered, tagged: r.tagged });
       } catch (e) { D.errors.push(key + ': ' + e); }
     }
     if (SC.mode === 'all' || SC.mode === 'dms' || (SC.mode === 'parts' && SC.dms)) try {
@@ -203,6 +209,8 @@
     const one = D.channelUpdates && MINE.includes(SC.key) && D.channelUpdates[0] && D.channelUpdates[0].item;
     D.mine = one ? [one].filter(u => !u.ack).map(u => line(SC.key, u))
       : D.campaigns.filter(c => MINE.includes(c.id)).flatMap(c => c.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => line(c.id, u)));
+    // @Ty tags in any campaign's creator channels, keyed "tag <campaign> #channel"
+    D.mine = D.mine.concat(D.campaigns.flatMap(c => (c.tagged || []).map(t => `tag ${c.id} ${t.channel} | ${Math.round(t.waitingMin / 60)}h | TAGGED TY (coach ${t.coach}) | LAST STAFF MSG: ${t.context.replace(/\n/g, ' ').slice(-160)} | MESSAGES: ${t.message.replace(/\n/g, ' / ').slice(0, 360)}`)));
     // Coaches server items, keyed "coaches #channel": who | why it needs Ty | what they said
     D.coachLines = (D.coaches ? D.coaches.items : []).map(it => `coaches ${it.channel} (${it.category}) | ${Math.round(it.waitingMin / 60)}h | ${it.kind} | TY LAST SAID: ${it.context.replace(/\n/g, ' ').slice(-120)} | THEY SAID: ${it.text.replace(/\n/g, ' / ').slice(0, 400)}`);
     D.progress = 'done'; D.done = true;
@@ -211,6 +219,8 @@
     const D = window.__disc; drafts = drafts || {}; acks = acks || [];
     for (const c of D.campaigns) { c.unanswered.forEach(u => { const k = dkey(c.id, u.channel); if (acks.includes(k)) u.ack = true; if (MINE.includes(c.id) && drafts[k]) u.draft = drafts[k]; }); c.unanswered = c.unanswered.filter(u => !u.ack).map(({ ack, ...u }) => u); }
     for (const cu of D.channelUpdates || []) if (cu.item) { const k = dkey(cu.campaign, cu.item.channel); if (acks.includes(k)) cu.item = null; else { if (drafts[k]) cu.item.draft = drafts[k]; delete cu.item.ack; } }
+    for (const c of D.campaigns) c.tagged = (c.tagged || []).filter(t => !acks.includes(`tag ${c.id} ${t.channel}`)).map(t => drafts[`tag ${c.id} ${t.channel}`] ? { ...t, draft: drafts[`tag ${c.id} ${t.channel}`] } : t);
+    for (const cu of D.channelUpdates || []) if (cu.tagged) { const k = `tag ${cu.campaign} ${cu.tagged.channel}`; if (acks.includes(k)) cu.tagged = null; else if (drafts[k]) cu.tagged.draft = drafts[k]; }
     if (D.coaches) D.coaches.items = D.coaches.items.filter(it => !acks.includes('coaches ' + it.channel)).map(it => drafts['coaches ' + it.channel] ? { ...it, draft: drafts['coaches ' + it.channel] } : it);
     const payload = { campaigns: D.campaigns, ...(D.dms ? { dms: D.dms } : {}), ...(D.coaches ? { coaches: D.coaches } : {}), ...(D.channelUpdates ? { channelUpdates: D.channelUpdates } : {}), ...(D.scope.mode !== 'all' ? { completeRescans: true } : {}), scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
     const f = document.createElement('form'); f.method = 'POST'; f.action = 'https://gigca-cm-portal-production.up.railway.app/api/runner/ingest-form'; f.style.display = 'none';
