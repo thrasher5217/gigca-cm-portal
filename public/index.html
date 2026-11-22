@@ -206,7 +206,7 @@ const H=36e5, DAY=864e5;
 const WIN=[['a','start',12],['b','mid',17],['c','end',22]]; // ET check-in windows and the hour each one closes
 
 /* ---------- state ---------- */
-let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set(), copied=new Set();
+let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, offline=false, localQueue=[], sentIds=new Set(), copied=new Set();
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
 const WHO={capcut:'Ty McGuire'}; // coach filter per campaign page
@@ -387,8 +387,11 @@ const tfSeg=()=>`<div class="seg">${TFS.map(([k,l])=>`<span class="${TF===k?'on'
 
 /* ---------- data load ---------- */
 async function load(){
-  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true}
-  catch(e){try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
+  try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true;offline=false}
+  catch(e){
+    // The real portal never shows made-up data: if the server can't be reached (e.g. mid-deploy), keep the last real data and retry.
+    if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){offline=true;if(!S.campaigns.length&&!live)S={campaigns:[],slack:[],audits:[],queue:[]};render();clearTimeout(load.t);load.t=setTimeout(load,5000);return}
+    try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
   S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];
   S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.creators=c.creators||[];
     if(c.discord){const ch=c.discord.channels||{},byCh={};
@@ -442,7 +445,7 @@ function render(){
   const ls=lastScans();
   $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, all four Discords, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
-  $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
+  $('#banner').innerHTML=offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
   $('#view').innerHTML=({today:vToday,capcut:()=>vCampaign('capcut',sub),artlist:()=>vCampaign('artlist',sub),creatify:()=>vCampaign('creatify',sub),melius:()=>vCampaign('melius',sub),creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
