@@ -69,30 +69,45 @@
   const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 && h < 22 ? 'c' : null; return w && `${p.year}-${p.month}-${p.day}:${w}`; };
   const WARM = /warm(ing)?[\s-]?up|warming|warmup|warm(ed)? (my|the|up)?\s*(acc|account|feed|page)/i;
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
+  // A question or a problem always needs a reply, even if it starts with "ok" or "thanks".
+  const QUESTION = /\?|\b(what|whats|what's|when|where|why|how|who|which|wdym|hbu)\b|^\s*(can|could|should|shall|do|does|did|is|are|am|was|were|would|have|has|any|anyone)\b/im;
+  const PROBLEM = /\b(help|need|issue|problem|wrong|error|stuck|confused|can'?t|won'?t|not|banned|flagged|shadow ?banned|pay|paid|payment|money|invoice|link)\b/i;
+  // No reply needed: a short acknowledgment ("ok", "thanks!", "🔥") with no question or problem in it. Attachments need a look.
+  const noReply = x => { x = String(x || '').trim(); return !x || (x.length <= 60 && x !== '[attachment]' && ACK.test(x) && !QUESTION.test(x) && !PROBLEM.test(x)); };
+  // When the reply clock starts for a run of creator messages: at the first message that needs a reply (null = none does).
+  const clockStart = r => { const m = r.ms.find(m => !noReply(m.x)); return m ? m.t : null; };
   function analyze(chans, staffRe, opt) {
     opt = opt || {};
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
-    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {};
+    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {}, acks = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
       const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
-      for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id }); }
+      for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; L.ms.push(m); } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id, ms: [m] }); }
       hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
-      runs.forEach((r, i) => { const nx = runs[i + 1]; if (!r.st && nx && r.t > mo) (resp[coach] = resp[coach] || []).push([Math.round(r.t / 6e4), Math.round((nx.t - r.t) / 6e4)]); if (!r.st && nx && r.t > wk) (rt[coach] = rt[coach] || []).push((nx.t - r.t) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
+      // Response time: from the first creator message that needs a reply to the next coach message. Runs that are only
+      // acknowledgments start no clock (counted in acks so the audit can say how many were left out).
+      // resp entries: [clock start minute, minutes to reply, channel id, minute of the creator's last message in the run]
+      runs.forEach((r, i) => { const nx = runs[i + 1], s0 = r.st ? null : clockStart(r);
+        if (!r.st && s0 == null && r.t > mo) (acks[coach] = acks[coach] || []).push(Math.round(r.t / 6e4));
+        if (s0 != null && nx && s0 > mo) (resp[coach] = resp[coach] || []).push([Math.round(s0 / 6e4), Math.round((nx.t - s0) / 6e4), c.id, Math.round(r.end / 6e4)]);
+        if (s0 != null && nx && s0 > wk) (rt[coach] = rt[coach] || []).push((nx.t - s0) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
       const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st), firstS = hs.find(m => m.st);
       const warm = [...hs].reverse().find(m => !m.st && WARM.test(m.x)), iso = t => t ? new Date(t).toISOString() : null;
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
         lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), oldestMsgAt: iso(hs[0] && hs[0].t),
         warmAt: iso(warm && warm.t), warmText: warm ? warm.x.slice(0, 160) : null };
-      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, lastAt: iso(L.end), channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
-        context: (runs[runs.length - 2] || { x: '' }).x.slice(-300), ack: L.n === 1 && L.x.length < 45 && !L.x.includes('?') && ACK.test(L.x.trim()) });
+      const ls = L && !L.st ? clockStart(L) : null;
+      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, startAt: iso(ls || L.t), lastAt: iso(L.end), channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - (ls || L.t)) / 6e4), message: L.x.slice(0, 600),
+        context: (runs[runs.length - 2] || { x: '' }).x.slice(-300), ack: ls == null });
     }
     const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? Math.round(a[Math.floor(a.length / 2)]) : null; }, coachStats = {};
     Object.keys(rt).forEach(k => coachStats[k] = { medianResponseMin: med(rt[k]), replies7d: rt[k].length, over15h7d: rt[k].filter(m => m > 900).length });
     // resp = every creator message -> next staff reply in the last 31 days, as [minute timestamp, minutes to reply], for any timeframe
     Object.keys(resp).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).resp = resp[k].sort((a, b) => a[0] - b[0]).slice(-3000));
+    Object.keys(acks).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).acks = acks[k].slice(-3000));
     Object.keys(wins).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkins = [...wins[k]].sort());
     return { coachStats, channels, unanswered: un };
   }

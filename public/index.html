@@ -226,14 +226,35 @@ function applyRead(){
   if(S.allDms){S.dms=S.allDms.filter(m=>!isRead(dmKey(m)));S.readDms=S.allDms.filter(m=>isRead(dmKey(m)))}else S.readDms=[];
   const sl=S.allSlack||[];S.slack=sl.filter(m=>!isRead(slKey(m)));S.readSlack=sl.filter(m=>isRead(slKey(m)));
 }
-async function markRead(key,label,on){
+async function markRead(key,label,on,extra){
   S.read=S.read||{};
-  if(on)S.read[key]={at:new Date().toISOString(),label};else delete S.read[key];
+  if(on)S.read[key]={at:new Date().toISOString(),label,...(extra||{})};else delete S.read[key];
   applyRead();render();toast(on?'Marked read · hidden until they send something new':'Back in the queue');
-  if(live)try{const r=await fetch('api/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,label,read:on})});if(!r.ok)throw new Error((await r.json()).error);S.read=(await r.json()).read||S.read}
+  if(live)try{const r=await fetch('api/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,label,read:on,...(extra||{})})});if(!r.ok)throw new Error((await r.json()).error);await load()}
   catch(e){toast('Could not save: '+e.message)}
 }
-const readBtn=(key,label)=>`<button class="sm ghost" data-markread="${esc(key)}" data-label="${esc(label)}">✓ Mark read</button>`;
+// When the reply clock started for a waiting creator (older scans: worked out from the wait time).
+const startOf=(c,u)=>u.startAt||new Date(+new Date(c.discordScannedAt||Date.now())-u.waitingMin*6e4).toISOString();
+const readBtn=(key,label,c,u)=>`<button class="sm ghost" data-markread="${esc(key)}" data-label="${esc(label)}"${c&&u?` data-camp="${c.id}" data-uid="${esc(u.id)}"`:''}>✓ Mark read</button>`;
+// Mark read counts as the reply: the response is timed from the creator's message to the click, unless a coach answered
+// sooner. If they wrote again after the click, the scan's own timing stands. Then the 7-day stats are recomputed.
+function adjustResp(){
+  const marks=Object.values(S.read||{}).filter(m=>m.c&&m.ch&&m.start);
+  S.campaigns.forEach(c=>{
+    const chans=(c.discord||{}).channels||{}, stats=(c.discord=c.discord||{}).coachStats=(c.discord.coachStats||{}), touched=new Set();
+    marks.filter(m=>m.c===c.id).forEach(m=>{
+      const coach=(chans[m.ch]||{}).coach||m.coach; if(!coach)return;
+      const cs=stats[coach]=stats[coach]||{medianResponseMin:null,replies7d:0,over15h7d:0}; cs.resp=cs.resp||[]; cs.marked=cs.marked||[];
+      const T=Math.round(+new Date(m.start)/6e4), mins=Math.max(0,Math.round(+new Date(m.at)/6e4)-T), lastM=m.last?Math.round(+new Date(m.last)/6e4):null;
+      const e=cs.resp.find(x=>x[2]===m.ch&&Math.abs(x[0]-T)<=2);
+      if(e){if(e[3]==null||lastM==null||e[3]<=lastM+1){if(mins<e[1])cs.marked.push(T);e[1]=Math.min(e[1],mins)}}
+      else{cs.resp.push([T,mins,m.ch,lastM??T]);cs.marked.push(T)}
+      touched.add(coach);
+    });
+    touched.forEach(k=>{const cs=stats[k],wk=(Date.now()-7*DAY)/6e4,w=cs.resp.sort((a,b)=>a[0]-b[0]).filter(e=>e[0]>=wk).map(e=>e[1]);
+      cs.medianResponseMin=med(w);cs.replies7d=w.length;cs.over15h7d=w.filter(x=>x>900).length});
+  });
+}
 function readSection(items,keyFn,row){
   if(!items.length)return '';
   return `<div class="readsec"><button class="sm ghost" data-showread="1">${SHOWREAD?'Hide':'Show'} marked read (${items.length})</button>${SHOWREAD?`<div class="list" style="margin-top:8px">${items.map(m=>row(m,`<button class="sm ghost" data-unread="${esc(keyFn(m))}">Mark unread</button>`)).join('')}</div>`:''}</div>`;
@@ -317,6 +338,9 @@ const TFS=[['today','Today so far'],['yday','Yesterday'],['7d','7 days'],['30d',
 let TF='today';
 const chiMid=t=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));return t-((+p.hour*60+ +p.minute)*60+ +p.second)*1000-new Date(t).getMilliseconds()};
 function tfWin(tf,now=Date.now()){const m=chiMid(now);return tf==='today'?[m,now]:tf==='yday'?[m-DAY,m]:tf==='7d'?[now-7*DAY,now]:[now-30*DAY,now]}
+// What the response numbers leave out or time at the Mark read click, for one window.
+const leftOut=(cs,t0,t1)=>{const inW=a=>(a||[]).filter(m=>m*6e4>=t0&&m*6e4<t1).length,a=inW(cs.acks),m=inW(cs.marked);
+  return (a?` · ${plural(a,'acknowledgment')} (ok, thanks…) needed no reply`:'')+(m?` · ${m} timed at your Mark read click`:'')};
 const med=a=>{a=a.slice().sort((x,y)=>x-y);return a.length?a[Math.floor(a.length/2)]:null};
 const groupCpm=rows=>{let v=0,s=0;rows.forEach(([cpm,views])=>{if(cpm!=null&&views){v+=views;s+=cpm*views/1000}});return v?s/v*1000:null};
 // When did the creator start posting, as an index into the 7-day strip (0 = 6 days ago, 6 = today)? -1 = before the strip.
@@ -341,7 +365,7 @@ function audit(c,name,tf=TF){
     detail:(lateNow.length?`${lateNow.length} still waiting over 15h`:'')+(slow15.length?`${lateNow.length?' · ':''}${slow15.length} answered after 15h+`:'')+(!n15?'Every creator answered within 15h':'')+covNote,items:lateNow.map(u=>`${u.channel} · waiting ${wait(u.waitingMin)}`)});
   // 2. median response under 5h
   const mins=ev.map(e=>e[1]), md=cs.resp?med(mins):(tf==='7d'?cs.medianResponseMin:null);
-  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`,strike:tf==='7d'&&md>300?'Strike 3 · median over 5h this week':null});
+  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:tf==='7d'&&md>300?'Strike 3 · median over 5h this week':null});
   // 3. check-ins, 3 a day (ET), last before 10 PM
   if(cs.checkins){
     const set=new Set(cs.checkins), nd=tf==='today'?1:tf==='yday'?1:tf==='7d'?7:30, startOff=tf==='yday'?1:0, h=+etParts(scanAt).hour;
@@ -428,7 +452,7 @@ async function load(){
       .sort((a,b)=>c.creators.filter(x=>x.coach===b).length-c.creators.filter(x=>x.coach===a).length);
     c.allUn=c.unanswered;
   });
-  applyRead();noteSendChanges();
+  applyRead();adjustResp();noteSendChanges();
   render();
 }
 async function act(list){
@@ -565,7 +589,7 @@ function vReply(c){
     h+=`<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div>
     <div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}
     <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…" ${busy?'disabled':''}>${esc(busy?sd.text:u.draft||'')}</textarea>
-    <div class="actions">${canSend?`<button class="pri sm" data-sendreply="${esc(u.id)}" data-camp="${c.id}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send'}</button><button class="sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓':'Copy & open'}</button>`:`<button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>`}${sd?sendTag(sd):''}${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
+    <div class="actions">${canSend?`<button class="pri sm" data-sendreply="${esc(u.id)}" data-camp="${c.id}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send'}</button><button class="sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓':'Copy & open'}</button>`:`<button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>`}${sd?sendTag(sd):''}${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel,c,u)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
   return h+'</div>'+rd;
 }
 
@@ -595,7 +619,7 @@ function vInbox(c){
   if(!un.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
   for(const coach of [...new Set(un.map(u=>u.coach||'Unassigned'))]){
     const list=un.filter(u=>(u.coach||'Unassigned')===coach);
-    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
+    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel,c,u)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
   }
   return h+rd;
 }
@@ -809,7 +833,8 @@ document.addEventListener('click',async e=>{
   else if(d.ff){F.flag=d.ff;render()}
   else if(d.who){WHO[d.wc]=d.who;render()}
   else if(d.tf){TF=d.tf;render()}
-  else if(d.markread)markRead(d.markread,d.label||'',true);
+  else if(d.markread){const c=d.camp&&camp(d.camp),u=c&&c.unanswered.find(x=>x.id===d.uid);
+    markRead(d.markread,d.label||'',true,u&&u.channelId?{c:c.id,ch:u.channelId,coach:u.coach||'',start:startOf(c,u),last:u.lastAt||null}:null)}
   else if(d.unread)markRead(d.unread,'',false);
   else if(d.showread){SHOWREAD=!SHOWREAD;render()}
 });

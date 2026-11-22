@@ -181,7 +181,15 @@ app.post('/api/read', (req, res) => {
   if (!key || key.length > 300) return res.status(400).json({ error: 'key required' });
   const r = readJson(READ, {}), cut = Date.now() - 45 * 864e5;
   for (const k of Object.keys(r)) if (+new Date(r[k].at) < cut) delete r[k]; // forget marks after 45 days
-  if (b.read === false) delete r[key]; else r[key] = { at: new Date().toISOString(), label: String(b.label || '').slice(0, 120) };
+  if (b.read === false) delete r[key];
+  else {
+    r[key] = { at: new Date().toISOString(), label: String(b.label || '').slice(0, 120) };
+    // For a creator waiting in a channel, the click counts as the reply: the portal times the response from the
+    // creator's message (start) to this click, unless a coach answered sooner. last = their latest message at the time.
+    const iso = v => { const t = Date.parse(v); return isNaN(t) ? null : new Date(t).toISOString(); };
+    if (CAMPS.includes(b.c) && /^\d{15,22}$/.test(String(b.ch || '')) && iso(b.start))
+      Object.assign(r[key], { c: b.c, ch: String(b.ch), coach: String(b.coach || '').slice(0, 80), start: iso(b.start), last: iso(b.last) });
+  }
   writeJson(READ, r); res.json({ ok: true, read: r });
 });
 app.post('/api/actions', async (req, res) => {
