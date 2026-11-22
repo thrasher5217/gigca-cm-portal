@@ -57,15 +57,15 @@
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
   function analyze(chans, staffRe) {
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
-    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, un = [], channels = {}, rt = {}, wins = {};
+    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = COACH[key] || key, general = /announcement|general/i.test(c.name);
       const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id }); }
-      hs.forEach(m => { if (m.st && m.t > now - 8 * 864e5) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
+      hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
-      runs.forEach((r, i) => { const nx = runs[i + 1]; if (!r.st && nx && r.t > wk) (rt[coach] = rt[coach] || []).push((nx.t - r.t) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
+      runs.forEach((r, i) => { const nx = runs[i + 1]; if (!r.st && nx && r.t > mo) (resp[coach] = resp[coach] || []).push([Math.round(r.t / 6e4), Math.round((nx.t - r.t) / 6e4)]); if (!r.st && nx && r.t > wk) (rt[coach] = rt[coach] || []).push((nx.t - r.t) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
       const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st), firstS = hs.find(m => m.st);
       const warm = [...hs].reverse().find(m => !m.st && WARM.test(m.x)), iso = t => t ? new Date(t).toISOString() : null;
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
@@ -76,6 +76,8 @@
     }
     const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? Math.round(a[Math.floor(a.length / 2)]) : null; }, coachStats = {};
     Object.keys(rt).forEach(k => coachStats[k] = { medianResponseMin: med(rt[k]), replies7d: rt[k].length, over15h7d: rt[k].filter(m => m > 900).length });
+    // resp = every creator message -> next staff reply in the last 31 days, as [minute timestamp, minutes to reply], for any timeframe
+    Object.keys(resp).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).resp = resp[k].sort((a, b) => a[0] - b[0]).slice(-3000));
     Object.keys(wins).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkins = [...wins[k]].sort());
     return { coachStats, channels, unanswered: un };
   }

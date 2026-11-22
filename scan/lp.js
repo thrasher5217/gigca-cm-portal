@@ -11,7 +11,7 @@
   ];
   const g = async u => { const x = await fetch(u); if (!x.ok) throw new Error(u.split('?')[0] + ' ' + x.status); return x.json(); };
   const fmt = d => d.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-  const end = fmt(new Date()), start = fmt(new Date(Date.now() - 6 * 864e5));
+  const end = fmt(new Date()), start = fmt(new Date(Date.now() - 6 * 864e5)), start30 = fmt(new Date(Date.now() - 29 * 864e5)), yday = fmt(new Date(Date.now() - 864e5));
   const cpm = (cents, views) => views && cents ? +(cents / 100 / views * 1000).toFixed(2) : null;
   async function scan(id, name, cid, role) {
     let rows = [], cursor = '', guard = 0;
@@ -19,11 +19,15 @@
       const j = await g(`/api/buy/campaigns/${id}/creator-rows?limit=100&cursor=${encodeURIComponent(cursor)}&status=active&sortBy=views&sortDir=desc&startDate=${start}&endDate=${end}`);
       rows = rows.concat(j.rows); cursor = j.hasMore ? j.nextCursor : '';
     } while (cursor && ++guard < 20);
-    const ent = {}, health = {}, apc = {}; let dates = [];
+    const ent = {}, health = {}, apc = {}, e30 = {}, eT = {}, eY = {}; let dates = [];
+    const stats = (a, b, ids) => g(`/api/buy/analytics/stats/entities?startDate=${a}&endDate=${b}&offerIds=${id}&ids=${ids}`);
     for (let i = 0; i < rows.length; i += 25) {
       const ids = rows.slice(i, i + 25).map(r => r.uid).join(',');
+      // 30 days, today and yesterday feed the coach audit timeframes; failures there never block the scan
+      const [m, t, y] = await Promise.all([stats(start30, end, ids), stats(end, end, ids), stats(yday, yday, ids)].map(p => p.catch(() => null)));
+      if (m) Object.assign(e30, m.byCreatorId); if (t) Object.assign(eT, t.byCreatorId); if (y) Object.assign(eY, y.byCreatorId);
       const [e, h, a] = await Promise.all([
-        g(`/api/buy/analytics/stats/entities?startDate=${start}&endDate=${end}&offerIds=${id}&ids=${ids}`),
+        stats(start, end, ids),
         g(`/api/buy/creators/account-health?ids=${ids}`).catch(() => ({ byCreatorId: {} })),
         g(`/api/buy/campaigns/${id}/account-post-counts?ids=${ids}`).catch(() => ({ byCreatorId: {} }))]);
       Object.assign(ent, e.byCreatorId); Object.assign(health, h.byCreatorId); Object.assign(apc, a.byCreatorId); dates = e.consistencyDates || dates;
@@ -41,6 +45,8 @@
         coach: 'Unassigned', channel: d ? '#' + d.channelName : '', channelId: d ? d.channelId : null,
         postsToday: c[6] || 0, postsYesterday: c[5] || 0, posts7d: c.reduce((a, b) => a + b, 0), views7d: e.views || 0, cpm: cpm(e.earningsCents || 0, e.views || 0),
         viewsAllTime: at.views || 0, postsAllTime: at.posts || 0, cpmAllTime: cpm(atCents, at.views || 0),
+        daily: c.length === 7 ? c : null, // posts per day, last 7 days ending today (LaunchPoint's strip is always 7 days)
+        rng: Object.fromEntries([['t', eT], ['y', eY], ['m', e30]].map(([k, src]) => { const z = src[r.uid] || {}; return [k, { v: z.views || 0, posts: z.posts || 0, cpm: cpm(z.earningsCents || 0, z.views || 0) }]; })),
         expectedPerDay: s.weeklyWindow && s.weeklyWindow.postsRequired ? Math.round(s.weeklyWindow.postsRequired / 7) : 3,
         inDiscord: inD ? inD.has(r.uid) : true, responseRate: null,
         daysOnCampaign: Math.max(1, Math.round((Date.now() - new Date(s.joinedAt)) / 864e5)), step: s.step && s.step.name,
@@ -54,7 +60,7 @@
       id: cid, lpId: id, name, role, targetCpm: 4, expectedPerDay: 3,
       cpm: cpm(S.spendCents.current, S.views.current), views7d: S.views.current, spend7d: Math.round(S.spendCents.current / 100),
       cpmAllTime: A ? cpm(A.spendCents.current, A.views.current) : null, viewsAllTime: A ? A.views.current : null, spendAllTime: A ? Math.round(A.spendCents.current / 100) : null,
-      postsByDay: dates.map((dt, i) => ({ date: dt, posts: creators.reduce((a, x) => a + (((ent[x.id] || {}).consistency || [])[i] || 0), 0) })),
+      days7: dates.length === 7 ? dates : null, postsByDay: dates.map((dt, i) => ({ date: dt, posts: creators.reduce((a, x) => a + (((ent[x.id] || {}).consistency || [])[i] || 0), 0) })),
       scannedAt: new Date().toISOString(), guildId: mem ? mem.guildId : null, creators,
     };
   }
