@@ -42,10 +42,36 @@ trap 'rm -rf "$LOCK"' EXIT
 resp=$(curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"host\":\"$(hostname -s | tr -cd 'A-Za-z0-9._-')\"}" "$PORTAL/api/runner/claim" 2>&1) || { log "claim failed: ${resp:0:200}"; exit 0; }
 scope=$(json_get "$resp" scope)
+sends=$(json_get "$resp" sends)
+
+# Replies Ty pressed Send on: the Mac Mini types them into Discord as him, then reports each one back.
+if [[ -n "$sends" && "$sends" != "[]" ]]; then
+  sids=$(osascript -l JavaScript -e 'function run(a){return JSON.parse(a[0]).map(x=>x.id).join("\n")}' "$sends" 2>/dev/null)
+  report() { # id status detail
+    local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({status:a[0],detail:a[1]})}' "$2" "$3")
+    curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" "$PORTAL/api/runner/actions/$1" >/dev/null 2>&1 || log "could not report send $1"
+  }
+  log "send $(print -r -- "$sids" | wc -l | tr -d ' ') message(s)"
+  git -C "$DIR" pull --ff-only -q >/dev/null 2>&1 || log "git pull failed; using the scripts already here"
+  if [[ ! -x "$CLAUDE" ]]; then for id in ${(f)sids}; do report "$id" failed "Claude Code is not installed on the Mac Mini"; done; exit 1; fi
+  prompt="$(<"$DIR/runner/send.md")"$'\n\n'"SENDS=$sends"
+  out=$(cd "$DIR" && perl -e 'alarm shift; exec @ARGV' 600 "$CLAUDE" -p "$prompt" --chrome --no-session-persistence \
+        --allowedTools "ToolSearch,Read,mcp__claude-in-chrome" 2>&1)
+  print -r -- "$out" | tail -20 | sed 's/^/    /' >> "$LOG"
+  for id in ${(f)sids}; do
+    line=$(print -r -- "$out" | grep -E "^(SENT|FAILED) $id( |\$)" | tail -1)
+    if [[ "$line" == "SENT $id" ]]; then report "$id" done ""
+    elif [[ -n "$line" ]]; then report "$id" failed "${line#FAILED $id - }"
+    else report "$id" failed "the Mac Mini did not say whether it was sent. Check the channel before sending again"; fi
+  done
+  log "send finished"
+  exit 0
+fi
+
 [[ -z "$scope" ]] && exit 0                            # nothing to do; this is the normal case
 ids=$(json_get "$resp" ids); [[ -z "$ids" ]] && ids="[]"
-P='((lp|dc)\.(capcut|artlist|creatify|melius)|dms|slack)'
-[[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
+P='((lp|dc)\.(capcut|artlist|creatify|melius|yri)|dms|slack)'
+[[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|yri|dms|slack|channel:(capcut|artlist|creatify|melius|yri):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
 
 finish() { # status detail
   local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({ids:JSON.parse(a[0]),status:a[1],detail:a[2]})}' "$ids" "$1" "$2")

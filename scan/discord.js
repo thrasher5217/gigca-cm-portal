@@ -7,10 +7,24 @@
 (() => {
   const GUILDS = [
     ['capcut', '1569756845319520387', /Creators/i], ['artlist', '1570552478817067038', /^Team /i],
-    ['creatify', '1562201369811877949', /Creators/i], ['melius', '1559661121588306052', /Creators/i]];
+    ['creatify', '1562201369811877949', /Creators/i], ['melius', '1559661121588306052', /Creators/i],
+    // YRI lives in the shared UGC University server: no fixed id, found by server name; only the Team Ty category (Ty's creators).
+    ['yri', null, /Team Ty\b/i, { server: /UGC\s*Univ/i, section: /\bYRI\b/i, coach: 'Ty McGuire', name: 'YRI', role: 'cm' }]];
+  const MINE = ['capcut', 'yri']; // Ty is the coach: drafts are written for these
+  // Find a server id from the server list on the left by its name.
+  async function guildOf(G) {
+    if (G[1]) return G[1];
+    for (let i = 0; i < 20; i++) {
+      const el = [...document.querySelectorAll('[data-list-item-id^="guildsnav___"]')].find(e => G[3].server.test((e.getAttribute('aria-label') || '') + ' ' + (e.innerText || '')));
+      const id = el && el.getAttribute('data-list-item-id').slice(12); if (id && /^\d+$/.test(id)) return id;
+      await sleep(300);
+    }
+    throw new Error('server not found in the Discord server list (is it inside a closed folder?)');
+  }
   const COACH = { 'Ty': 'Ty McGuire', 'Amrin': 'Amrin Jahan', 'Dakota': 'Dakota Crane', 'Team Aristotle': 'Joseph Ferrall', 'Team Da Vinci': 'Razeen Khan',
     'Team Van Gogh': 'Ryan Soto', 'Mat': 'Mathew Wu', 'Eric': 'Eric Liang', 'Grace': 'Grace Goldstein', 'Anna': 'Anna Florek', 'Baraa': 'Baraa Alrash' };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const dkey = (cid, ch) => (cid === 'capcut' ? '' : cid + ' ') + ch; // draft/ack key
   const go = p => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); };
   const SC = window.__discScope || { mode: 'all' };
   const STAFF = /^(Ty M|Amrin|Dakota|Reece|yan\b|Razeen|Joseph|matwu|Eric|Grace|baroobi|Anna)/i; // used when only one channel is read
@@ -55,12 +69,13 @@
   const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 && h < 22 ? 'c' : null; return w && `${p.year}-${p.month}-${p.day}:${w}`; };
   const WARM = /warm(ing)?[\s-]?up|warming|warmup|warm(ed)? (my|the|up)?\s*(acc|account|feed|page)/i;
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
-  function analyze(chans, staffRe) {
+  function analyze(chans, staffRe, opt) {
+    opt = opt || {};
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
     const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {};
     for (const c of chans) {
-      const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
+      const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id }); }
       hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
@@ -85,19 +100,32 @@
     if (SC.mode === 'channel') {
       try {
         const G = GUILDS.find(x => x[0] === SC.key); if (!G || !/^\d+$/.test(String(SC.channelId))) throw new Error('bad channel scope');
-        go(`/channels/${G[1]}`); await sleep(3000);
-        const msgs = await read(`/channels/${G[1]}/${SC.channelId}`, SC.channelId), name = ((document.title.match(/#([^ |]+)/) || [])[1] || 'channel');
-        const r = analyze([{ id: SC.channelId, name, cat: '', msgs }], STAFF);
-        D.channelUpdates = [{ campaign: SC.key, guildId: G[1], channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
+        if (!G[1]) { go('/channels/@me'); await sleep(2500); }
+        const gid = await guildOf(G);
+        go(`/channels/${gid}`); await sleep(3000);
+        const msgs = await read(`/channels/${gid}/${SC.channelId}`, SC.channelId), name = ((document.title.match(/#([^ |]+)/) || [])[1] || 'channel');
+        const r = analyze([{ id: SC.channelId, name, cat: '', msgs }], STAFF, G[3]);
+        D.channelUpdates = [{ campaign: SC.key, guildId: gid, channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
       } catch (e) { D.errors.push('channel: ' + e); }
     }
-    for (const [key, g, re] of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
+    for (const G of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
+      const [key, , re, opt] = G;
       try {
+        if (!G[1]) { go('/channels/@me'); await sleep(2500); }
+        const g = await guildOf(G);
         go(`/channels/${g}`); await sleep(3500);
-        const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && re.test(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
+        const sb = await sidebar();
+        let cats = [...new Set(sb.filter(x => !x.isCat && x.catName && re.test(x.catName)).map(x => x.catName))];
+        if (opt && opt.section && cats.length > 1) { // several "Team Ty" categories: keep the YRI one(s)
+          const heads = sb.filter(x => x.isCat).map(x => x.name.replace(/ \(category\)$/, ''));
+          const yri = cats.filter(c => opt.section.test(c) || opt.section.test(heads[heads.indexOf(c) - 1] || ''));
+          if (yri.length) cats = yri; else D.errors.push(key + ': several categories match, using all: ' + cats.join(', '));
+        }
+        if (!cats.length) throw new Error('no matching category found');
+        const list = sb.filter(x => !x.isCat && cats.includes(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
         for (const ch of list) { D.progress = `${key} ${chans.length}/${list.length}`; chans.push({ id: ch.id, name: ch.name.replace(/ \(.*$/, '').replace(/^unread, /, ''), cat: ch.catName, msgs: await read(`/channels/${g}/${ch.id}`, ch.id).catch(() => []) }); }
-        const r = analyze(chans);
-        D.campaigns.push({ id: key, guildId: g, discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
+        const r = opt ? analyze(chans, STAFF, { ...opt, freq: true }) : analyze(chans);
+        D.campaigns.push({ id: key, guildId: g, ...(opt ? { name: opt.name, role: opt.role, discordCategories: cats } : {}), discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
       } catch (e) { D.errors.push(key + ': ' + e); }
     }
     if (SC.mode === 'all' || SC.mode === 'dms' || (SC.mode === 'parts' && SC.dms)) try {
@@ -109,14 +137,17 @@
       D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me) return null; let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
         return { id: r.id, messageId: run[0].id || null, lastAt: run[run.length - 1].t || null, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
     } catch (e) { D.errors.push('dms: ' + e); }
-    const cc = D.campaigns.find(c => c.id === 'capcut'), one = D.channelUpdates && SC.key === 'capcut' && D.channelUpdates[0] && D.channelUpdates[0].item;
-    D.mine = one ? [one].filter(u => !u.ack).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : cc ? cc.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : [];
+    // Ty's own waiting creators (CapCut + YRI), keyed "#channel" for CapCut and "yri #channel" for YRI.
+    const line = (cid, u) => `${dkey(cid, u.channel)} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`;
+    const one = D.channelUpdates && MINE.includes(SC.key) && D.channelUpdates[0] && D.channelUpdates[0].item;
+    D.mine = one ? [one].filter(u => !u.ack).map(u => line(SC.key, u))
+      : D.campaigns.filter(c => MINE.includes(c.id)).flatMap(c => c.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => line(c.id, u)));
     D.progress = 'done'; D.done = true;
   })();
   window.discSubmit = (drafts, acks, token) => {
-    const D = window.__disc;
-    for (const c of D.campaigns) { c.unanswered.forEach(u => { if ((acks || []).includes(u.channel)) u.ack = true; if (c.id === 'capcut' && drafts && drafts[u.channel]) u.draft = drafts[u.channel]; }); c.unanswered = c.unanswered.filter(u => !u.ack).map(({ ack, ...u }) => u); }
-    for (const cu of D.channelUpdates || []) if (cu.item) { if ((acks || []).includes(cu.item.channel)) cu.item = null; else { if (drafts && drafts[cu.item.channel]) cu.item.draft = drafts[cu.item.channel]; delete cu.item.ack; } }
+    const D = window.__disc; drafts = drafts || {}; acks = acks || [];
+    for (const c of D.campaigns) { c.unanswered.forEach(u => { const k = dkey(c.id, u.channel); if (acks.includes(k)) u.ack = true; if (MINE.includes(c.id) && drafts[k]) u.draft = drafts[k]; }); c.unanswered = c.unanswered.filter(u => !u.ack).map(({ ack, ...u }) => u); }
+    for (const cu of D.channelUpdates || []) if (cu.item) { const k = dkey(cu.campaign, cu.item.channel); if (acks.includes(k)) cu.item = null; else { if (drafts[k]) cu.item.draft = drafts[k]; delete cu.item.ack; } }
     const payload = { campaigns: D.campaigns, ...(D.dms ? { dms: D.dms } : {}), ...(D.channelUpdates ? { channelUpdates: D.channelUpdates } : {}), ...(D.scope.mode !== 'all' ? { completeRescans: true } : {}), scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
     const f = document.createElement('form'); f.method = 'POST'; f.action = 'https://gigca-cm-portal-production.up.railway.app/api/runner/ingest-form'; f.style.display = 'none';
     for (const [k, v] of [['token', token], ['payload', JSON.stringify(payload)]]) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }

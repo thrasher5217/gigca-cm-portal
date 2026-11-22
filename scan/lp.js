@@ -64,10 +64,28 @@
       scannedAt: new Date().toISOString(), guildId: mem ? mem.guildId : null, creators,
     };
   }
+  // YRI has no fixed id here: look it up by name in the campaign list. If it isn't on LaunchPoint, it is skipped quietly
+  // (the portal still shows its Discord side) and the reason lands in window.__lpSummary.notes.
+  const notes = {};
+  async function findByName(re) {
+    for (const u of ['/api/buy/campaigns?limit=200', '/api/buy/campaigns', '/api/buy/offers?limit=200', '/api/buy/offers']) {
+      const j = await g(u).catch(() => null); if (!j) continue; const hits = [];
+      (function walk(o, d) { if (!o || typeof o !== 'object' || d > 6) return; if (Array.isArray(o)) return o.forEach(x => walk(x, d + 1));
+        const nm = o.name || o.title || o.offerName || o.campaignName, id = o.id || o.offerId || o.campaignId;
+        if (typeof nm === 'string' && re.test(nm) && /^[0-9a-f-]{36}$/i.test(String(id || ''))) hits.push(String(id));
+        Object.values(o).forEach(v => walk(v, d + 1)); })(j, 0);
+      if (hits.length) return hits[0];
+    }
+    return null;
+  }
+  if (!CAMPAIGNS.some(x => x[2] === 'yri')) {
+    const id = await findByName(/\bYRI\b/i).catch(() => null);
+    if (id) CAMPAIGNS.push([id, 'YRI', 'yri', 'cm']); else notes.yri = 'YRI not found in the LaunchPoint campaign list';
+  }
   const out = [], errs = {};
   const only = Array.isArray(window.__lpScope) && window.__lpScope.length ? window.__lpScope : null; // optional: just these campaigns
   for (const [id, name, cid, role] of CAMPAIGNS.filter(x => !only || only.includes(x[2]))) { try { out.push(await scan(id, name, cid, role)); } catch (e) { errs[cid] = String(e); } }
-  window.__lpSummary = { errs, campaigns: out.map(c => ({ name: c.name, creators: c.creators.length, cpm: c.cpm, cpmAllTime: c.cpmAllTime, viewsAllTime: c.viewsAllTime, spendAllTime: c.spendAllTime })) };
+  window.__lpSummary = { errs, notes, campaigns: out.map(c => ({ name: c.name, creators: c.creators.length, cpm: c.cpm, cpmAllTime: c.cpmAllTime, viewsAllTime: c.viewsAllTime, spendAllTime: c.spendAllTime })) };
   if (out.length) {
     let fr = document.getElementById('__pf'); if (!fr) { fr = document.createElement('iframe'); fr.name = '__pf'; fr.id = '__pf'; fr.style.display = 'none'; document.body.appendChild(fr); }
     const f = document.createElement('form'); f.method = 'POST'; f.action = PORTAL; f.target = '__pf'; f.style.display = 'none';

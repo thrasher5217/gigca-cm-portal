@@ -41,7 +41,12 @@ app.post('/login', (req, res) => {
 const RUNNER = path.join(DATA_DIR, 'runner.json'); // Mac Mini heartbeat + last scheduled slot
 // Scopes: all | <campaign> | dms | slack | channel:<campaign>:<id> | parts:<list> where the list picks pieces, e.g.
 // parts:lp.capcut,dc.artlist,slack (lp = LaunchPoint analytics, dc = Discord messages, for that campaign).
-const CAMPS = ['capcut', 'artlist', 'creatify', 'melius'];
+const CAMPS = ['capcut', 'artlist', 'creatify', 'melius', 'yri'];
+const MINE = ['capcut', 'yri']; // campaigns where Ty is the coach: replies can be sent from the portal
+// Messages queued before sending was turned on were never meant to go out: cancel them once so they can't be sent by surprise.
+{ const q = getQueue(); let n = 0;
+  q.forEach(a => { if (a.type === 'discord_send' && a.status === 'pending' && !a.live) { a.status = 'cancelled'; a.detail = 'queued before sending was turned on'; n++; } });
+  if (n) writeJson(QUEUE, q); }
 const PART = `((lp|dc)\\.(${CAMPS.join('|')})|dms|slack)`;
 const SCOPE_OK = new RegExp(`^(all|${CAMPS.join('|')}|dms|slack|channel:(${CAMPS.join('|')}):\\d{15,22}|parts:${PART}(,${PART})*)$`);
 const ALL_PARTS = [...CAMPS.map(c => 'lp.' + c), ...CAMPS.map(c => 'dc.' + c), 'dms', 'slack'];
@@ -73,7 +78,14 @@ app.get('/api/runner/pending', runnerAuth, (req, res) => res.json(getQueue().fil
 app.post('/api/runner/claim', runnerAuth, (req, res) => {
   const rn = readJson(RUNNER, {}), q = getQueue(), now = new Date().toISOString();
   rn.lastPollAt = now; rn.host = String((req.body || {}).host || '').slice(0, 60);
-  if (q.some(a => a.type === 'rescan' && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'a scan is already running' }); }
+  if (q.some(a => (a.type === 'rescan' || a.live) && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'the Mac Mini is busy' }); }
+  // Replies to send go first: they're quick. A waiting scan is picked up on the next poll, 30 seconds later.
+  const sends = q.filter(a => a.type === 'discord_send' && a.live && a.status === 'pending').slice(0, 10);
+  if (sends.length) {
+    sends.forEach(a => { a.status = 'running'; a.startedAt = now; });
+    writeJson(QUEUE, q); writeJson(RUNNER, rn);
+    return res.json({ scope: null, sends: sends.map(a => ({ id: a.id, guildId: a.guildId, channelId: a.channelId, channel: a.channel, text: a.text })) });
+  }
   let picked = q.filter(a => a.type === 'rescan' && a.status === 'pending');
   const slot = dueSlot();
   if (!picked.length && slot && rn.lastSlot !== slot) {
@@ -93,17 +105,26 @@ app.post('/api/runner/finish', runnerAuth, (req, res) => {
   q.forEach(a => { if (ids.has(a.id) && a.status === 'running') { a.status = status; a.finishedAt = now; a.detail = String(b.detail || '').slice(0, 300); n++; } });
   writeJson(QUEUE, q); res.json({ ok: true, updated: n });
 });
-// A run that died without reporting back (Mac Mini asleep, crash): free it after 40 minutes so the next request can run.
+// A run that died without reporting back (Mac Mini asleep, crash): free it so the next request can run.
+// Scans get 40 minutes, sends 15. A send that times out may still have gone out, so check the channel before retrying.
 setInterval(() => {
-  const q = getQueue(), cut = Date.now() - 40 * 60000; let n = 0;
-  q.forEach(a => { if (a.status === 'running' && a.startedAt && +new Date(a.startedAt) < cut) { a.status = 'failed'; a.finishedAt = new Date().toISOString(); a.detail = 'no report from the Mac Mini after 40 minutes'; n++; } });
+  const q = getQueue(), now = Date.now(); let n = 0;
+  q.forEach(a => { const lim = (a.live ? 15 : 40) * 60000; if (a.status === 'running' && a.startedAt && +new Date(a.startedAt) < now - lim) { a.status = 'failed'; a.finishedAt = new Date().toISOString(); a.detail = a.live ? 'no report from the Mac Mini after 15 minutes. Check the channel before sending again' : 'no report from the Mac Mini after 40 minutes'; n++; } });
   if (n) writeJson(QUEUE, q);
 }, 60000);
 app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
   if (!a) return res.status(404).json({ error: 'not found' });
-  a.status = req.body.status || 'done'; a.detail = req.body.detail || ''; a.finishedAt = new Date().toISOString();
-  writeJson(QUEUE, q); res.json(a);
+  a.status = req.body.status === 'failed' ? 'failed' : 'done'; a.detail = String(req.body.detail || '').slice(0, 300); a.finishedAt = new Date().toISOString();
+  writeJson(QUEUE, q);
+  // A reply went out: Ty spoke last in that channel now, so it leaves the waiting list right away instead of at the next scan.
+  if (a.type === 'discord_send' && a.status === 'done' && a.channelId) {
+    const st = readJson(STATE, null), c = st && (st.campaigns || []).find(x => x.id === a.campaign);
+    if (c) { c.unanswered = (c.unanswered || []).filter(u => u.channelId !== a.channelId);
+      const ch = c.discord && c.discord.channels && c.discord.channels[a.channelId]; if (ch) ch.lastStaffMsgAt = a.finishedAt;
+      writeJson(STATE, st); }
+  }
+  res.json(a);
 });
 // Full scan replaces state; partial scan ({campaigns:[one]}, {slack:[...]}) merges by campaign id.
 app.post('/api/runner/ingest', runnerAuth, (req, res) => {
@@ -167,11 +188,17 @@ app.post('/api/actions', async (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
   for (const a of list) {
     if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
-    // Sending is CapCut-only by design; every other campaign is oversight.
-    if (a.type === 'discord_send' && (a.campaign !== 'capcut' || !a.channel || !String(a.text || '').trim()))
-      return res.status(400).json({ error: 'discord_send needs campaign=capcut, channel and text' });
+    // Sending is only for Ty's own campaigns (CapCut, YRI); every other campaign is oversight.
+    if (a.type === 'discord_send' && (!MINE.includes(a.campaign) || !a.channel || !String(a.text || '').trim()))
+      return res.status(400).json({ error: 'discord_send needs campaign capcut or yri, a channel and text' });
+    // live = really sent by the Mac Mini (replies). Without it the message only waits in the queue, as bulk messages always have.
+    const live = a.type === 'discord_send' && a.live === true;
+    if (live && (!/^\d{15,22}$/.test(String(a.channelId || '')) || !/^\d{15,22}$/.test(String(a.guildId || ''))))
+      return res.status(400).json({ error: 'sending needs the Discord server and channel ids; rescan the campaign first' });
+    if (live && String(a.text).length > 2000) return res.status(400).json({ error: 'Discord messages are limited to 2000 characters' });
     out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
-      channel: a.channel || null, channelId: a.channelId || null, text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
+      channel: a.channel || null, channelId: a.channelId || null, guildId: live ? String(a.guildId) : null, live: live || undefined,
+      text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
   }
   // Rescans wait in the queue until the Mac Mini claims them (it asks every 30s). Only fixed scope formats are accepted,
   // and a scope that is already waiting is not queued twice.

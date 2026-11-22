@@ -182,8 +182,9 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 <div id="toast"></div>
 <script>
 /* ---------- constants ---------- */
-const CAMPS=['capcut','artlist','creatify','melius'];
-const NAMES={capcut:'CapCut',artlist:'Artlist',creatify:'Creatify',melius:'Melius'};
+const CAMPS=['capcut','artlist','creatify','melius','yri'];
+const NAMES={capcut:'CapCut',artlist:'Artlist',creatify:'Creatify',melius:'Melius',yri:'YRI'};
+const MINE=['capcut','yri']; // Ty coaches these: reply queue, drafts and Send
 const ICON={
   today:'<path d="M3 9h18M7 3v4M17 3v4M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>',
   camp:'<path d="M4 4h16v16H4z" opacity=".0"/><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
@@ -191,7 +192,7 @@ const ICON={
   chat:'<path d="M4 5h16v11H8l-4 4z"/>',
   doc:'<path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/>'};
 const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
-const VIEWS=[['today','Today','today'],['capcut','CapCut','camp'],['artlist','Artlist','camp'],['creatify','Creatify','camp'],['melius','Melius','camp'],['creators','Creators & flags','people'],['slack','Slack & DMs','chat'],['audits','Weekly audits','doc']];
+const VIEWS=[['today','Today','today'],['capcut','CapCut','camp'],['artlist','Artlist','camp'],['creatify','Creatify','camp'],['melius','Melius','camp'],['yri','YRI','camp'],['creators','Creators & flags','people'],['slack','Slack & DMs','chat'],['audits','Weekly audits','doc']];
 // CapCut Discord channels used in the welcome message (<#id> renders as a channel link in Discord).
 const CH={startHere:'1569757043642867835',tyAnn:'1570964214728630322'};
 const CHNAME={[CH.startHere]:'🏁-start-here',[CH.tyAnn]:'team-ty-announcements'};
@@ -210,7 +211,7 @@ const WIN=[['a','start',12],['b','mid',17],['c','end',22]]; // ET check-in windo
 let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, offline=false, localQueue=[], sentIds=new Set(), copied=new Set();
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
-const WHO={capcut:'Ty McGuire'}; // coach filter per campaign page
+const WHO={capcut:'Ty McGuire',yri:'Ty McGuire'}; // coach filter per campaign page
 let SORT='wait', SHOWREAD=false;
 /* ---------- marked as read ---------- */
 // A mark names the exact message: channel + time of its latest message + a hash of the text. If the creator sends
@@ -309,7 +310,7 @@ function flags(c,x){
 const all=()=>S.campaigns.flatMap(c=>c.creators.map(x=>({c,x,f:flags(c,x)})));
 const has=(r,k)=>r.f.some(f=>f.k===k);
 const pendingUn=c=>{const m=c.unanswered.filter(u=>isTy(u.coach));return (m.length?m:c.unanswered).filter(u=>!sentIds.has(u.id))};
-const waitingOn=c=>c?(c.id==='capcut'?pendingUn(c):c.unanswered):[];
+const waitingOn=c=>c?(MINE.includes(c.id)?pendingUn(c):c.unanswered):[];
 
 /* ---------- coach daily audit (UGC Coach SOP + strike rules) ---------- */
 const TFS=[['today','Today so far'],['yday','Yesterday'],['7d','7 days'],['30d','30 days']];
@@ -419,7 +420,7 @@ async function load(){
     if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){offline=true;if(!S.campaigns.length&&!live)S={campaigns:[],slack:[],audits:[],queue:[]};render();clearTimeout(load.t);load.t=setTimeout(load,5000);return}
     try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
   S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.read=S.read||{};S.allSlack=S.slack;S.allDms=S.dms||null;
-  S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.creators=c.creators||[];
+  S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.creators=c.creators||[];c.name=c.name||NAMES[c.id]||c.id;c.role=c.role||(MINE.includes(c.id)?'cm':'oversight');c.targetCpm=c.targetCpm||4;c.expectedPerDay=c.expectedPerDay||3;
     if(c.discord){const ch=c.discord.channels||{},byCh={};
       c.creators.forEach(x=>{const d=x.channelId&&ch[x.channelId];if(d){x.coach=d.coach;x.responseRate=d.responseRate;x.channel='#'+d.name;byCh[x.channelId]=x}else if(c.discordScannedAt)x.coach='Unassigned'});
       c.unanswered.forEach(u=>{const x=byCh[u.channelId];if(x){u.creator=x.name;u.creatorId=x.id}});}
@@ -427,7 +428,7 @@ async function load(){
       .sort((a,b)=>c.creators.filter(x=>x.coach===b).length-c.creators.filter(x=>x.coach===a).length);
     c.allUn=c.unanswered;
   });
-  applyRead();
+  applyRead();noteSendChanges();
   render();
 }
 async function act(list){
@@ -440,6 +441,15 @@ async function act(list){
   return true;
 }
 const queue=()=>(live?S.queue:localQueue).slice().reverse();
+// The newest live send to this creator's channel since their latest message (older sends don't apply any more).
+const sendOf=(c,u)=>queue().find(a=>a.type==='discord_send'&&a.live&&a.campaign===c.id&&a.channelId===u.channelId&&+new Date(a.createdAt)>=+new Date(u.lastAt||0)-1000);
+const sendTag=a=>a.status==='pending'?`<span class="tag amb">${runnerAge()!=null&&runnerAge()<2?(S.queue.some(x=>x.type==='rescan'&&x.status==='running')?'Queued · after the current scan':'Queued · Mac Mini picks it up shortly'):'Queued · Mac Mini offline'}</span>`
+  :a.status==='running'?'<span class="tag acc">Sending on the Mac Mini…</span>':a.status==='done'?'<span class="tag grn">Sent ✓</span>':a.status==='failed'?`<span class="tag red" title="${esc(a.detail||'')}">Failed: ${esc((a.detail||'unknown').slice(0,90))}</span>`:'';
+const sendsActive=()=>live&&(S.queue||[]).some(a=>a.live&&(a.status==='pending'||a.status==='running'));
+let sendSeen={};
+function noteSendChanges(){
+  (S.queue||[]).filter(a=>a.live).forEach(a=>{const was=sendSeen[a.id];if(was&&was!==a.status){if(a.status==='done')toast('Sent to '+(a.channel||'Discord'));else if(a.status==='failed')toast('Send failed: '+(a.detail||'').slice(0,80))}sendSeen[a.id]=a.status});
+}
 
 /* ---------- scan history ---------- */
 function describeScope(s,c){
@@ -465,16 +475,17 @@ function lastScans(){
 function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
 function render(){
   const {v,sub}=route(), cc=camp('capcut');
-  const badges={capcut:cc?pendingUn(cc).length:0,artlist:waitingOn(camp('artlist')).length,creatify:waitingOn(camp('creatify')).length,melius:waitingOn(camp('melius')).length,slack:S.slack.length+(S.dms||[]).length};
-  const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${k==='capcut'||k==='slack'?'hot':''}">${badges[k]}</span>`:''}</a>`;
-  $('#nav').innerHTML=`<div class="brand"><div class="logo">G</div>GigaCM</div>`+link(VIEWS[0])+'<div class="navsec">Campaigns</div>'+VIEWS.slice(1,5).map(link).join('')+'<div class="navsec">Everything else</div>'+VIEWS.slice(5).map(link).join('')+
+  const badges={slack:S.slack.length+(S.dms||[]).length};CAMPS.forEach(k=>badges[k]=waitingOn(camp(k)).length);
+  const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${MINE.includes(k)||k==='slack'?'hot':''}">${badges[k]}</span>`:''}</a>`;
+  const nC=1+CAMPS.length;
+  $('#nav').innerHTML=`<div class="brand"><div class="logo">G</div>GigaCM</div>`+link(VIEWS[0])+'<div class="navsec">Campaigns</div>'+VIEWS.slice(1,nC).map(link).join('')+'<div class="navsec">Everything else</div>'+VIEWS.slice(nC).map(link).join('')+
     `<div class="foot">${live&&S.runner&&S.runner.lastPollAt?(runnerAge()<2?'<span><span class="dot on"></span>Mac Mini online</span>':'<span><span class="dot off"></span>Mac Mini seen '+ago(S.runner.lastPollAt)+'</span>'):''}<span>Full check every 3 hours</span></div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   const ls=lastScans();
   $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, all four Discords, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
   $('#banner').innerHTML=offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
-  $('#view').innerHTML=({today:vToday,capcut:()=>vCampaign('capcut',sub),artlist:()=>vCampaign('artlist',sub),creatify:()=>vCampaign('creatify',sub),melius:()=>vCampaign('melius',sub),creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
 }
@@ -484,7 +495,7 @@ function vToday(){
   const rows=all(), cc=camp('capcut'), mine=rows.filter(r=>r.c.id==='capcut');
   const st=k=>rows.filter(r=>cstat(r.c,r.x).k===k).length;
   let h='<div class="kpis">'+
-    kpi(cc?pendingUn(cc).length:0,'CapCut creators waiting on you',cc&&pendingUn(cc).length?'red':'')+
+    kpi(MINE.reduce((n,k)=>n+waitingOn(camp(k)).length,0),'Your creators waiting on you',MINE.some(k=>waitingOn(camp(k)).length)?'red':'')+
     kpi(S.slack.length+(S.dms||[]).length,'Slack + Discord DMs to answer',S.slack.length+(S.dms||[]).length?'amb':'')+
     kpi(cc?newJoiners(cc).filter(r=>r.needs).length:0,'New creators to welcome','blu')+
     kpi(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
@@ -515,15 +526,15 @@ function vToday(){
 /* ---------- campaign pages ---------- */
 function vCampaign(id,sub){
   const c=camp(id); if(!c)return `<div class="empty">No ${NAMES[id]} data yet.</div>`;
-  const cap=id==='capcut', audits=c.coachNames.map(n=>fullAudit(c,n));
-  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO.capcut||r.x.coach===WHO.capcut)).length,false]]:[['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
+  const cap=MINE.includes(id), audits=c.coachNames.map(n=>fullAudit(c,n));
+  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],...(c.creators.length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
     ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],
     ...audits.map(a=>['coach:'+a.name,first(a.name),a.bad,a.bad>0]),
     ['posts',"Didn't post",null],['warm','Warming up',c.creators.filter(x=>cstat(c,x).k==='warming').length,false],
-    ...(cap?[['scale','Offer 5/day',null],['mass','Mass message',null],['queue','Queue',null]]:[])];
+    ...(id==='capcut'?[['scale','Offer 5/day',null],['mass','Mass message',null]]:[]),...(cap?[['queue','Queue',null]]:[])];
   const cur=sub&&tabs.some(t=>t[0]===sub)?sub:(cap?'reply':'summary');
   let h=`<div class="tabs">${tabs.map(([k,l,n,hot])=>`<a href="#${id}/${encodeURIComponent(k)}" class="${k===cur?'on':''}">${esc(l)}${n?`<span class="cnt ${hot?'hot':''}">${n}</span>`:''}</a>`).join('')}</div>`;
-  h+=`<div class="bar" style="margin-top:-8px"><span class="hint">Analytics ${ago(c.scannedAt)} · Discord messages ${c.discordScannedAt?ago(c.discordScannedAt):'not scanned yet'}</span><span class="sp"></span><button class="sm ghost" data-rescan="parts:dc.${id}">↻ Messages</button><button class="sm ghost" data-rescan="parts:lp.${id}">↻ Analytics</button></div>`;
+  h+=`<div class="bar" style="margin-top:-8px"><span class="hint">Analytics ${ago(c.scannedAt)} · Discord messages ${c.discordScannedAt?ago(c.discordScannedAt):'not scanned yet'}</span><span class="sp"></span><button class="sm ghost" data-rescan="parts:dc.${id}">↻ Messages</button><button class="sm ghost" data-rescan="parts:lp.${id}">↻ Analytics</button></div>${id==='yri'&&!c.scannedAt?'<p class="hint" style="margin-top:-4px">No LaunchPoint analytics for YRI yet, so posting checks are empty. Replies come from Team Ty in the UGC University Discord.</p>':''}`;
   if(cur==='reply')return h+vReply(c);
   if(cur==='new')return h+vNew(c);
   if(cur==='inbox')return h+vInbox(c);
@@ -533,7 +544,7 @@ function vCampaign(id,sub){
   if(cur==='warm')return h+vWarm(c);
   if(cur==='scale')return h+vScale(c);
   if(cur==='mass')return h+vMass(c);
-  if(cur==='queue')return h+vQueue();
+  if(cur==='queue')return h+vQueue(id);
   return h;
 }
 function whoSeg(c,list,countFn){
@@ -549,12 +560,12 @@ function vReply(c){
   const rd=readSection((c.readUn||[]).filter(u=>byWho(c,u.coach)),unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
   if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
   const over=list.filter(u=>u.waitingMin>=900).length;
-  h+=`<p class="lede">${plural(list.length,'creator')} spoke last and ${list.length===1?'is':'are'} waiting${over?`, <span class="red">${over} over 15h</span>`:''}. Drafts are AI suggestions in your voice; edit, then copy and open the message in Discord.</p><div class="list">`;
-  for(const u of list){const done=sentIds.has(u.id)||copied.has(u.id), url=msgUrl(c,u);
+  h+=`<p class="lede">${plural(list.length,'creator')} spoke last and ${list.length===1?'is':'are'} waiting${over?`, <span class="red">${over} over 15h</span>`:''}. Drafts are AI suggestions in your voice. Edit, then Send: the Mac Mini posts it in their channel as you, usually within a minute or two.</p><div class="list">`;
+  for(const u of list){const done=sentIds.has(u.id)||copied.has(u.id), url=msgUrl(c,u), sd=sendOf(c,u), busy=sd&&(sd.status==='pending'||sd.status==='running'), canSend=!!(u.channelId&&(c.guildId||GUILD[c.id]));
     h+=`<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div>
     <div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}
-    <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…">${esc(u.draft||'')}</textarea>
-    <div class="actions"><button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
+    <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…" ${busy?'disabled':''}>${esc(busy?sd.text:u.draft||'')}</textarea>
+    <div class="actions">${canSend?`<button class="pri sm" data-sendreply="${esc(u.id)}" data-camp="${c.id}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send'}</button><button class="sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓':'Copy & open'}</button>`:`<button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>`}${sd?sendTag(sd):''}${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
   return h+'</div>'+rd;
 }
 
@@ -658,7 +669,7 @@ function vScale(c){
   const rows=c.creators.map(x=>({c,x,f:flags(c,x)})).filter(r=>has(r,'scale')&&r.x.inDiscord&&r.x.channel);
   return `<p class="lede">Under target CPM and hit expected posts yesterday.</p>`+bulk('scale',rows,'scale');
 }
-const QNOTE='<p class="hint">Queued messages are not sent yet: sending from the Mac Mini is not turned on. Use the copy buttons to send by hand for now.</p>';
+const QNOTE='<p class="hint">Replies you Send from Needs reply go out from the Mac Mini as you. Bulk and mass messages are only queued: they are not sent automatically yet. Use the copy buttons for those.</p>';
 function bulk(id,rows,tpl){
   if(!rows.length)return '<div class="empty">Nobody right now.</div>';
   return `<div class="tw" style="margin-top:12px"><table><thead><tr><th><input type="checkbox" data-all="${id}" checked></th><th>Creator</th><th>Coach</th><th class="n">CPM</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d</th></tr></thead><tbody>${rows.map(({x})=>`<tr><td><input type="checkbox" class="pick_${id}" value="${esc(x.id)}" checked></td><td><b>${esc(x.name)}</b> <span class="faint">${esc(x.channel)}</span></td><td class="mute">${esc(x.coach)}</td><td class="n">${money(x.cpm)}</td><td class="n">${x.postsToday}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td></tr>`).join('')}</tbody></table></div>
@@ -670,9 +681,9 @@ function vMass(c){
   <label>Template <select id="mm_tpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label></div>
   <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button id="mm_send">Queue for each creator's channel</button><span class="hint">{first} becomes each creator's first name</span></div>${QNOTE}</div>`;
 }
-function vQueue(){
-  const q=queue().filter(a=>a.type!=='rescan');
-  return QNOTE+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status)}</span></td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
+function vQueue(id){
+  const q=queue().filter(a=>a.type!=='rescan'&&(!id||a.campaign===id));
+  return QNOTE+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td>${a.live?sendTag(a):`<span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status==='pending'?'queued, not sent':a.status)}</span>`}${a.detail&&!a.live?` <span class="faint">${esc(a.detail)}</span>`:''}</td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
 }
 
 /* ---------- other pages ---------- */
@@ -768,7 +779,7 @@ function renderProgress(){
 }
 const typing=()=>['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName);
 let tick=0;
-setInterval(()=>{renderProgress();const p=progressInfo();if(p&&p.state!=='done'&&live&&++tick%5===0&&!typing())load()},1000);
+setInterval(()=>{renderProgress();const p=progressInfo();++tick;if(live&&!typing()&&tick%5===0&&((p&&p.state!=='done')||sendsActive()))load()},1000);
 
 /* ---------- actions ---------- */
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
@@ -779,12 +790,15 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
   else if(d.rescan)rescan(d.rescan);
   else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
+  else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
+    if(!u)return;if(!text.trim())return toast('Write a reply first');if(text.length>2000)return toast('Too long: Discord allows 2000 characters');
+    if(await act([{type:'discord_send',live:true,campaign:c.id,creator:u.creator,channel:u.channel,channelId:u.channelId,guildId:c.guildId||GUILD[c.id],text}])){toast(live?'Queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
   else if(d.copyreply){const text=$('#d_'+CSS.escape(d.copyreply)).value;if(!text.trim())return toast('Write a reply first');if(await copy(text)){copied.add(d.copyreply);toast('Reply copied · paste it in Discord');if(d.url)window.open(d.url,'_blank','noopener');render()}}
   else if(d.welcome){const c=camp(d.camp),x=c.creators.find(y=>y.id===d.welcome),text=fill($('#wl_text').value,x.name);if(await copy(text)){copied.add('w'+x.id);toast('Welcome copied · paste it in '+(x.channel||'their channel'));const u=chanUrl(c,x.channelId);if(u)window.open(u,'_blank','noopener');render()}}
   else if(d.copyta){if(await copy($('#'+CSS.escape(d.copyta)).value))toast('Copied')}
