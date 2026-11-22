@@ -786,8 +786,8 @@ function vMass(c){
   <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button id="mm_send">Queue for each creator's channel</button><span class="hint">{first} becomes each creator's first name</span></div>${QNOTE}</div>`;
 }
 function vQueue(id){
-  const q=queue().filter(a=>a.type!=='rescan'&&(!id||a.campaign===id));
-  return QNOTE+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td>${a.live?sendTag(a):`<span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status==='pending'?'queued, not sent':a.status)}</span>`}${a.detail&&!a.live?` <span class="faint">${esc(a.detail)}</span>`:''}</td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
+  const q=queue().filter(a=>a.type!=='rescan'&&(!id||a.campaign===id)), running=q.filter(a=>a.status==='running').length;
+  return `<div class="bar">${QNOTE}<span class="sp"></span>${q.some(a=>a.status!=='running')?`<button class="sm" data-clearq="messages" data-camp="${esc(id||'')}">Clear queue</button>`:''}</div>${running?`<p class="hint">${plural(running,'message')} sending on the Mac Mini right now can't be stopped.</p>`:''}`+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td>${a.live?sendTag(a):`<span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status==='pending'?'queued, not sent':a.status)}</span>`}${a.detail&&!a.live?` <span class="faint">${esc(a.detail)}</span>`:''}</td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
 }
 
 /* ---------- Launchpoint Coaches server ---------- */
@@ -848,6 +848,7 @@ function renderMenu(){
   <label><input type="checkbox" data-part="coaches" ${keep.has('coaches')?'checked':''}> Launchpoint Coaches server</label><span></span><span></span>
   <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
   <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
+  ${scans().some(a=>a.status==='pending')?`<div class="msec"><div class="bar" style="margin:0"><span class="hint">${plural(scans().filter(a=>a.status==='pending').length,'scan')} waiting for the Mac Mini</span><span class="sp"></span><button class="sm" data-clearq="scans">Cancel waiting scans</button></div></div>`:''}
   <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
 }
 
@@ -915,7 +916,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
@@ -924,6 +925,11 @@ document.addEventListener('click',async e=>{
   else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[]).find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
     if(!u)return;if(!text.trim())return toast('Write a reply first');if(text.length>2000)return toast('Too long: Discord allows 2000 characters');
     if(await act([{type:'discord_send',live:true,campaign:c.id,creator:u.creator,channel:u.channel,channelId:u.channelId,guildId:c.guildId||GUILD[c.id],text}])){toast(live?'Queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
+  else if(d.clearq){const sc=d.clearq==='scans';
+    if(!confirm(sc?'Cancel every scan that is still waiting? A scan already running keeps going.':`Clear the ${d.camp?NAMES[d.camp]+' ':''}queue? Waiting messages are cancelled (not sent) and finished ones are removed from the list. A message being sent right now can't be stopped.`))return;
+    if(!live){localQueue=localQueue.filter(a=>sc?a.type!=='rescan':a.type==='rescan');toast('Cleared (preview)');return render()}
+    try{const r=await fetch('api/actions/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:d.clearq,campaign:d.camp||null})}),j=await r.json();if(!r.ok)throw new Error(j.error);
+      toast(sc?(j.cancelled?`Cancelled ${plural(j.cancelled,'waiting scan')}`:'No scans were waiting'):`Queue cleared · ${j.cancelled} cancelled, ${j.removed} removed`);if(sc)$('#menu').classList.remove('on');await load()}catch(e){toast('Failed: '+e.message)}}
   else if(d.cof){COF=d.cof;render()}
   else if(d.rank){OPENR.has(d.rank)?OPENR.delete(d.rank):OPENR.add(d.rank);render()}
   else if(d.sendcoach){const it=(S.coachItems||[]).find(x=>x.id===d.sendcoach),ta=$('#d_'+CSS.escape(d.sendcoach)),text=ta?ta.value:'';

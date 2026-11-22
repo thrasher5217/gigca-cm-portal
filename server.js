@@ -220,6 +220,20 @@ app.post('/api/actions', async (req, res) => {
   writeJson(QUEUE, q.concat(keep));
   res.json({ queued: keep, runner: readJson(RUNNER, {}) });
 });
+// Clear queue. kind=messages: cancel every waiting message (optionally one campaign's) and drop finished ones from the list.
+// kind=scans: cancel waiting rescans (finished scans stay, since they date the data). Anything running is left alone.
+app.post('/api/actions/clear', (req, res) => {
+  const b = req.body || {}, kind = b.kind === 'scans' ? 'scans' : 'messages', camp = b.campaign ? String(b.campaign) : null, now = new Date().toISOString();
+  const mine = a => kind === 'scans' ? a.type === 'rescan' : a.type === 'discord_send' && (!camp || a.campaign === camp);
+  let cancelled = 0, removed = 0;
+  const q = getQueue().filter(a => {
+    if (!mine(a) || a.status === 'running') return true;
+    if (a.status === 'pending') { a.status = 'cancelled'; a.finishedAt = now; a.detail = 'cleared'; cancelled++; return kind === 'scans'; }
+    if (kind === 'messages') { removed++; return false; }
+    return true;
+  });
+  writeJson(QUEUE, q); res.json({ ok: true, cancelled, removed });
+});
 app.delete('/api/actions/:id', (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
   if (!a || a.status !== 'pending') return res.status(409).json({ error: 'not pending' });
