@@ -603,7 +603,8 @@ function vToday(){
     const missed=c.creators.filter(x=>['posting','idle'].includes(cstat(c,x).k)&&x.postsYesterday===0).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
     const bars=c.postsByDay?c.postsByDay.map(d=>d.posts):[], mx=Math.max(1,...bars.map(n=>n||0));
     h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Auditing'}</span><span class="sp"></span><a class="lk" href="#${c.id}">Open →</a></h3>
-    <div class="row"><span>CPM 7d / target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
+    <div class="row"><span>CPM all-time / target</span><b class="num ${c.cpmAllTime==null?'':c.cpmAllTime>c.targetCpm?'red':'grn'}">${money(c.cpmAllTime)} / ${money(c.targetCpm)}</b></div>
+    <div class="row"><span>CPM 7d</span><b class="num ${c.cpm==null?'':c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)}</b></div>
     <div class="row"><span>Posted today</span><b class="num">${posted} creators · ${posts}/${exp} posts</b></div>
     <div class="row"><span>Missed yesterday <span class="faint">(active only)</span></span><b class="num ${missed?'red':''}">${missed}</b></div>
     <div class="row"><span>Warming up · first post due</span><b class="num blu">${cnt('warming')} · ${cnt('firstpost')}</b></div>
