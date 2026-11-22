@@ -83,6 +83,7 @@
   const COACHES = { id: '1552479657566142566', own: '1567608337720152285',
     cats: /capcut|artlist|creatify|melius|yri|ugc op|\bops\b|admin/i,
     skip: /polymarket/i, // Ty no longer oversees Polymarket: never read its categories (even ones like "Polymarket Admin")
+    skipCh: /hotline/i, skipIds: ['1555005292360630333'], // the Launchpoint Hotline channel: never notify Ty about it
     lead: /^(Rich Lin|Andrew Shin|Henry Pan|RichBot|Robo-?Pan|benlemwomper|andrewcshin|henrypandisc)/i };
   const isTyName = a => /^Ty\b/i.test(a || '') || /^tym0559/i.test(a || '');
   const MENTION = /@Ty\b|@tym0559|@UGC Op/i, ALLPING = /@everyone|@here/i;
@@ -194,7 +195,7 @@
     // and questions left unanswered in his campaign and ops channels. Read-only.
     if (SC.mode === 'all' || SC.mode === 'coaches' || (SC.mode === 'parts' && SC.coaches)) try {
       const G = COACHES; D.progress = 'coaches'; go(`/channels/${G.id}`); await sleep(3500);
-      const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && G.cats.test(x.catName) && !G.skip.test(x.catName) && !/voice channel|stage channel/i.test(x.name));
+      const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && G.cats.test(x.catName) && !G.skip.test(x.catName) && !G.skipIds.includes(x.id) && !G.skipCh.test(x.name) && !/voice channel|stage channel/i.test(x.name));
       if (!list.length) throw new Error('no matching categories (is the Launchpoint Coaches server in the server list?)');
       const now = Date.now(), items = [];
       for (const [i, ch] of list.entries()) {
