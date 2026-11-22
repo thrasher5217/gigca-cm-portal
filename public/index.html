@@ -526,7 +526,7 @@ function describeScope(s,c){
   s=s||'all';
   if(s==='all')return 'Full check';
   if(CAMPS.includes(s))return NAMES[s]+' · messages + analytics';
-  if(s==='dms')return 'Discord DMs';if(s==='slack')return 'Slack';
+  if(s==='dms')return 'Discord DMs';if(s==='slack')return 'Slack';if(s==='coaches')return 'Coaches server only';
   if(s.startsWith('channel:')){const [,k,id]=s.split(':'),v=((camp(k)||{}).discord||{}).channels||{};return NAMES[k]+' · '+(v[id]?'#'+v[id].name:'one channel')}
   const p=s.slice(6).split(','), out=[];
   CAMPS.forEach(k=>{const lp=p.includes('lp.'+k),dc=p.includes('dc.'+k);if(lp||dc)out.push(NAMES[k]+' '+(lp&&dc?'messages + analytics':dc?'messages':'analytics'))});
@@ -796,7 +796,7 @@ const coGroup=it=>{const c=it.category||'';const k=CAMPS.find(k=>new RegExp(NAME
 let COF='all';
 function vCoaches(){
   const C=S.coaches, all=S.coachItems||[], G=(C&&C.guildId)||'1552479657566142566';
-  const head=`<div class="bar"><span class="hint">${C?`${C.channels} channels checked ${ago(C.scannedAt)}`:'Not scanned yet'} · CMs, coaches and leadership asking you something: @mentions, replies to you, your #ty-mcguire channel, leadership asks, and questions nobody has answered</span><span class="sp"></span><button class="sm" data-rescan="parts:coaches">↻ Recheck coaches server</button></div>`;
+  const head=`<div class="bar"><span class="hint">${C?`${C.channels} channels checked ${ago(C.scannedAt)}`:'Not scanned yet'} · CMs, coaches and leadership asking you something: @mentions, replies to you, your #ty-mcguire channel, leadership asks, and questions nobody has answered</span><span class="sp"></span><button class="sm" data-rescan="coaches">↻ Recheck coaches server</button></div>`;
   if(!C)return head+'<div class="empty">The Launchpoint Coaches server is checked in every full check. Run one, or press Recheck.</div>';
   const groups=[...new Set(all.map(coGroup))], cur=COF==='all'||groups.includes(COF)?COF:'all', list=all.filter(it=>cur==='all'||coGroup(it)===cur).sort((a,b)=>b.waitingMin-a.waitingMin);
   let h=head+`<div class="bar"><div class="seg">${[['all','Everything'],...groups.map(g=>[g,g])].map(([k,l])=>{const n=all.filter(it=>k==='all'||coGroup(it)===k);return `<span class="${cur===k?'on':''}" data-cof="${esc(k)}">${esc(l)}<i class="${n.some(it=>it.kind==='mention'||it.kind==='your channel')?'red':''}">${n.length}</i></span>`}).join('')}</div></div>`;
@@ -857,6 +857,7 @@ function phasesFor(scope){
   if(/^channel:/.test(scope))return [['discord','Discord channel',2.5,'finishedAt']];
   if(scope==='dms')return [['discord','Discord DMs',3,'finishedAt']];
   if(scope==='slack')return [['slack','Slack',3,'finishedAt']];
+  if(scope==='coaches')return [['discord','Coaches server',3,'finishedAt']];
   const p=CAMPS.includes(scope)?['lp.'+scope,'dc.'+scope]:scope.slice(6).split(','), out=[];
   const lp=p.filter(x=>x.startsWith('lp.')).length, dc=p.filter(x=>x.startsWith('dc.')).length, dms=p.includes('dms'), co=p.includes('coaches'), sl=p.includes('slack');
   if(lp)out.push(['lp','LaunchPoint',2+lp*.4,'lpAt']);

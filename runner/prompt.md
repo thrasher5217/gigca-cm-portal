@@ -14,12 +14,14 @@ The last line of this prompt is "SCOPE=<value>", set by the runner. Use it only 
 - channel:<campaign>:<digits> (campaign is one of the five above; digits is a Discord channel id) -> step 4 for that single channel only; skip steps 3 and 5.
 - dms -> step 4 for DMs only; skip steps 3 and 5.
 - slack -> step 5 only.
+- coaches -> step 4 for the Launchpoint Coaches server ONLY, with exactly this setup line: window.__discScope = {mode:'coaches'};  Do not open any other server, skip steps 3 and 5, and leave LaunchPoint and Slack alone. It takes about 3 minutes.
 - parts:<comma list> -> only the pieces listed. Each piece is one of: lp.<campaign> (LaunchPoint analytics for that campaign, step 3), dc.<campaign> (Discord messages for that campaign, step 4), dms (Ty's Discord DMs, step 4), coaches (the Launchpoint Coaches server, step 4), slack (step 5). Skip any step with no pieces.
 Scoped runs put one setup line at the top of the same javascript_exec call as the script, before the script text:
   LaunchPoint, single campaign or parts with lp pieces: window.__lpScope = ['<campaign>', ...];   (all = no line)
   Discord campaign:  window.__discScope = {mode:'campaign', key:'<campaign>'};
   Discord channel:   window.__discScope = {mode:'channel', key:'<campaign>', channelId:'<digits>'};
   Discord dms:       window.__discScope = {mode:'dms'};
+  Discord coaches:   window.__discScope = {mode:'coaches'};
   Discord parts:     window.__discScope = {mode:'parts', keys:['<campaign>', ...], dms:<true if dms is listed, else false>, coaches:<true if coaches is listed, else false>};
 A single channel takes about 15 seconds, DMs about 1 minute, one campaign's Discord 2 to 4 minutes, LaunchPoint about 1 minute.
 

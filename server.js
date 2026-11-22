@@ -49,12 +49,12 @@ const SENDABLE = [...CAMPS, 'coaches']; // live replies Ty sends himself: his cr
   q.forEach(a => { if (a.type === 'discord_send' && a.status === 'pending' && !a.live) { a.status = 'cancelled'; a.detail = 'queued before sending was turned on'; n++; } });
   if (n) writeJson(QUEUE, q); }
 const PART = `((lp|dc)\\.(${CAMPS.join('|')})|dms|slack|coaches)`;
-const SCOPE_OK = new RegExp(`^(all|${CAMPS.join('|')}|dms|slack|channel:(${CAMPS.join('|')}):\\d{15,22}|parts:${PART}(,${PART})*)$`);
+const SCOPE_OK = new RegExp(`^(all|${CAMPS.join('|')}|dms|slack|coaches|channel:(${CAMPS.join('|')}):\\d{15,22}|parts:${PART}(,${PART})*)$`);
 const ALL_PARTS = [...CAMPS.map(c => 'lp.' + c), ...CAMPS.map(c => 'dc.' + c), 'dms', 'coaches', 'slack'];
 function toParts(s) {
   if (s === 'all') return ALL_PARTS;
   if (CAMPS.includes(s)) return ['lp.' + s, 'dc.' + s];
-  if (s === 'dms' || s === 'slack') return [s];
+  if (s === 'dms' || s === 'slack' || s === 'coaches') return [s];
   if (s.startsWith('channel:')) return ['dc.' + s.split(':')[1]];
   return s.slice(6).split(',');
 }
@@ -64,7 +64,8 @@ function mergeScopes(list) {
   if (u.length === 1) return normScope(u[0]);
   return partsScope(new Set(u.flatMap(toParts)));
 }
-const partsScope = set => ALL_PARTS.every(p => set.has(p)) ? 'all' : 'parts:' + ALL_PARTS.filter(p => set.has(p)).join(',');
+// Only the coaches server -> the plain 'coaches' scope, so the Mac Mini gets one fixed instruction instead of a parts list.
+const partsScope = set => ALL_PARTS.every(p => set.has(p)) ? 'all' : set.size === 1 && set.has('coaches') ? 'coaches' : 'parts:' + ALL_PARTS.filter(p => set.has(p)).join(',');
 const normScope = s => s.startsWith('parts:') ? partsScope(new Set(toParts(s))) : s;
 // Full scans at :43 past these hours, Chicago time. The Mac Mini asks every 30s; the portal decides when a scheduled scan is due.
 const SCHEDULE = { tz: 'America/Chicago', hours: [8, 11, 14, 17, 20, 23], minute: 43 };

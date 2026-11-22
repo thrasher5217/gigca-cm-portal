@@ -71,7 +71,7 @@ fi
 [[ -z "$scope" ]] && exit 0                            # nothing to do; this is the normal case
 ids=$(json_get "$resp" ids); [[ -z "$ids" ]] && ids="[]"
 P='((lp|dc)\.(capcut|artlist|creatify|melius|yri)|dms|slack|coaches)'
-[[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|yri|dms|slack|channel:(capcut|artlist|creatify|melius|yri):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
+[[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|yri|dms|slack|coaches|channel:(capcut|artlist|creatify|melius|yri):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
 
 finish() { # status detail
   local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({ids:JSON.parse(a[0]),status:a[1],detail:a[2]})}' "$ids" "$1" "$2")
