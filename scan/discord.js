@@ -1,6 +1,6 @@
 // Discord scan. Run in a discord.com tab (Claude in Chrome, Mac Mini). Read-only: opens channels and reads the DOM.
 // Optional scope, set before running: window.__discScope = {mode:'all'} (default) | {mode:'campaign', key:'capcut'} |
-//   {mode:'channel', key:'capcut', channelId:'123'} | {mode:'dms'} | {mode:'parts', keys:['capcut','melius'], dms:true}.
+//   {mode:'channel', key:'capcut', channelId:'123'} | {mode:'dms'} | {mode:'coaches'} | {mode:'parts', keys:['capcut','melius'], dms:true, coaches:true}.
 // Starts in the background; poll window.__disc.progress until window.__disc.done is true.
 // Then read window.__disc.mine (Ty's CapCut creators waiting), and call window.discSubmit(drafts, acks, TOKEN):
 //   drafts = {"#channel-name": "reply text"}, acks = ["#channel-name", ...] (messages that need no reply).
@@ -59,7 +59,10 @@
       const tm = li.querySelector('time[datetime]');
       const ct = [...li.querySelectorAll('[id^="message-content-"]')].find(e => !e.closest('[id^="message-reply-context-"]'));
       const acc = li.querySelector('[id^="message-accessories-"]'), txt = (ct ? ct.innerText : '').trim();
-      if (author && tm) out.push({ id: li.id.split('-').pop(), a: author, t: tm.getAttribute('datetime'), x: txt.slice(0, 400) || (acc && acc.children.length ? '[attachment]' : ''), b: !!li.querySelector('[class*="botTag"],[class*="appTag"]') });
+      const rc = li.querySelector('[id^="message-reply-context-"]'), ru = rc && rc.querySelector('[id^="message-username-"],[class*="username"]');
+      if (author && tm) out.push({ id: li.id.split('-').pop(), a: author, t: tm.getAttribute('datetime'), x: txt.slice(0, 400) || (acc && acc.children.length ? '[attachment]' : ''), b: !!li.querySelector('[class*="botTag"],[class*="appTag"]'), r: ru ? ru.innerText.replace(/^@/, '').trim() : null,
+        // me = Ty (the logged-in account) reacted to this message: Discord marks his own reactions as pressed
+        me: !!li.querySelector('[id^="message-reactions-"] [aria-pressed="true"], [class*="reactionMe"], [class*="reaction_"][class*="selected"]') });
     }
     return out;
   }
@@ -75,14 +78,41 @@
   // No reply needed: a short acknowledgment ("ok", "thanks!", "🔥") with no question or problem in it. Attachments need a look.
   const noReply = x => { x = String(x || '').trim(); return !x || (x.length <= 60 && x !== '[attachment]' && ACK.test(x) && !QUESTION.test(x) && !PROBLEM.test(x)); };
   // When the reply clock starts for a run of creator messages: at the first message that needs a reply (null = none does).
-  const clockStart = r => { const m = r.ms.find(m => !noReply(m.x)); return m ? m.t : null; };
+  // Ty reacting to a message counts as acknowledging it and everything before it in the run; only later messages can start it.
+  const clockStart = r => { let k = -1; r.ms.forEach((m, i) => { if (m.me) k = i; }); const m = r.ms.slice(k + 1).find(m => !noReply(m.x)); return m ? m.t : null; };
+  const COACHES = { id: '1552479657566142566', own: '1567608337720152285',
+    cats: /capcut|artlist|creatify|melius|yri|polymarket|ugc op|\bops\b|admin/i,
+    lead: /^(Rich Lin|Andrew Shin|Henry Pan|RichBot|Robo-?Pan|benlemwomper|andrewcshin|henrypandisc)/i };
+  const isTyName = a => /^Ty\b/i.test(a || '') || /^tym0559/i.test(a || '');
+  const MENTION = /@Ty\b|@tym0559|@UGC Op/i, ALLPING = /@everyone|@here/i;
+  // One item per channel, or null when nothing there needs Ty. Ty replying in the channel clears it.
+  function coachItem(ch, name, ms, now) {
+    let lastTy = -1; ms.forEach((m, i) => { if (isTyName(m.a) || m.me) lastTy = i; }); // a reaction from Ty counts as his answer
+    const after = ms.slice(lastTy + 1).filter(m => now - m.t < 7 * 864e5); if (!after.length) return null;
+    const own = ch.id === COACHES.own || /ty-?mcguire/i.test(name), announce = /announce/i.test(name);
+    const kindOf = m => MENTION.test(m.x) || isTyName(m.r) ? 'mention' : own && !noReply(m.x) ? 'your channel'
+      : COACHES.lead.test(m.a) && (ALLPING.test(m.x) || QUESTION.test(m.x) || PROBLEM.test(m.x)) ? 'leadership' : null;
+    let first = after.findIndex(kindOf), kind = first >= 0 ? kindOf(after[first]) : null;
+    if (first < 0 && !announce) { // a question nobody has answered yet: the last run in the channel, waiting an hour or more
+      let j = ms.length - 1; while (j > 0 && ms[j - 1].a === ms[j].a) j--;
+      const run = ms.slice(j);
+      if (j > lastTy && run.length && !isTyName(run[0].a) && run.some(m => QUESTION.test(m.x) || PROBLEM.test(m.x)) && now - run[0].t > 36e5 && now - run[0].t < 3 * 864e5) {
+        first = after.indexOf(run.find(m => QUESTION.test(m.x) || PROBLEM.test(m.x))); kind = 'question'; }
+    }
+    if (first < 0) return null;
+    const rest = after.slice(first), m0 = rest[0], cat = ch.catName || '';
+    return { id: ch.id + '-' + m0.t, channelId: ch.id, messageId: m0.id || null, channel: '#' + name, category: cat, kind, from: m0.a,
+      people: [...new Set(rest.filter(m => !isTyName(m.a)).map(m => m.a))].slice(0, 4), startAt: new Date(m0.t).toISOString(), lastAt: new Date(rest[rest.length - 1].t).toISOString(),
+      waitingMin: Math.round((now - m0.t) / 6e4), text: rest.map(m => (rest.length > 1 ? m.a + ': ' : '') + m.x).join('\n').slice(0, 700),
+      context: (ms.slice(0, lastTy + 1).filter(m => isTyName(m.a)).pop() || { x: '' }).x.slice(-200) };
+  }
   function analyze(chans, staffRe, opt) {
     opt = opt || {};
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
     const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], channels = {}, rt = {}, wins = {}, resp = {}, acks = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; L.ms.push(m); } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id, ms: [m] }); }
       hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
@@ -146,24 +176,43 @@
     if (SC.mode === 'all' || SC.mode === 'dms' || (SC.mode === 'parts' && SC.dms)) try {
       D.progress = 'dms'; go('/channels/@me'); await sleep(3000);
       const links = [...document.querySelectorAll('a[href^="/channels/@me/"]')].map(a => ({ id: a.getAttribute('href').split('/').pop(), label: (a.getAttribute('aria-label') || a.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80) })).filter(x => /^\d+$/.test(x.id)).slice(0, 20);
-      const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ id: m.id, a: clean(m.a), t: m.t, x: m.x })).slice(-8) });
+      const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ id: m.id, a: clean(m.a), t: m.t, x: m.x, me: m.me })).slice(-8) });
       const cnt = {}; res.forEach(r => new Set(r.ms.map(m => m.a)).forEach(a => cnt[a] = (cnt[a] || 0) + 1));
       const me = (Object.entries(cnt).sort((a, b) => b[1] - a[1])[0] || [''])[0], now = Date.now();
-      D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me) return null; let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
+      D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me || L.me) return null; /* Ty answered, or reacted to their last message */ let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
         return { id: r.id, messageId: run[0].id || null, lastAt: run[run.length - 1].t || null, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
     } catch (e) { D.errors.push('dms: ' + e); }
+    // Launchpoint Coaches server: what the CMs, coaches and leadership need from Ty. Same rules as Ty's campaign-report skill:
+    // @mentions of Ty (or his UGC Operations role) and replies to him, anything in his own #ty-mcguire channel, leadership asks,
+    // and questions left unanswered in his campaign and ops channels. Read-only.
+    if (SC.mode === 'all' || SC.mode === 'coaches' || (SC.mode === 'parts' && SC.coaches)) try {
+      const G = COACHES; D.progress = 'coaches'; go(`/channels/${G.id}`); await sleep(3500);
+      const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && G.cats.test(x.catName) && !/voice channel|stage channel/i.test(x.name));
+      if (!list.length) throw new Error('no matching categories (is the Launchpoint Coaches server in the server list?)');
+      const now = Date.now(), items = [];
+      for (const [i, ch] of list.entries()) {
+        D.progress = `coaches ${i}/${list.length}`;
+        const name = ch.name.replace(/ \(.*$/, '').replace(/^unread, /, '').replace(/^\d+ mentions?, /, ''), unread = /unread|mention/i.test(ch.name);
+        const ms = (await read(`/channels/${G.id}/${ch.id}`, ch.id).catch(() => [])).map(m => ({ ...m, a: clean(m.a), t: +new Date(m.t) })).filter(m => !isBot(m) || G.lead.test(m.a));
+        const item = coachItem(ch, name, ms, now); if (item) items.push({ ...item, unread });
+      }
+      D.coaches = { guildId: G.id, scannedAt: new Date().toISOString(), channels: list.length, items: items.sort((a, b) => b.waitingMin - a.waitingMin) };
+    } catch (e) { D.errors.push('coaches: ' + e); }
     // Ty's own waiting creators (CapCut + YRI), keyed "#channel" for CapCut and "yri #channel" for YRI.
     const line = (cid, u) => `${dkey(cid, u.channel)} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`;
     const one = D.channelUpdates && MINE.includes(SC.key) && D.channelUpdates[0] && D.channelUpdates[0].item;
     D.mine = one ? [one].filter(u => !u.ack).map(u => line(SC.key, u))
       : D.campaigns.filter(c => MINE.includes(c.id)).flatMap(c => c.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => line(c.id, u)));
+    // Coaches server items, keyed "coaches #channel": who | why it needs Ty | what they said
+    D.coachLines = (D.coaches ? D.coaches.items : []).map(it => `coaches ${it.channel} (${it.category}) | ${Math.round(it.waitingMin / 60)}h | ${it.kind} | TY LAST SAID: ${it.context.replace(/\n/g, ' ').slice(-120)} | THEY SAID: ${it.text.replace(/\n/g, ' / ').slice(0, 400)}`);
     D.progress = 'done'; D.done = true;
   })();
   window.discSubmit = (drafts, acks, token) => {
     const D = window.__disc; drafts = drafts || {}; acks = acks || [];
     for (const c of D.campaigns) { c.unanswered.forEach(u => { const k = dkey(c.id, u.channel); if (acks.includes(k)) u.ack = true; if (MINE.includes(c.id) && drafts[k]) u.draft = drafts[k]; }); c.unanswered = c.unanswered.filter(u => !u.ack).map(({ ack, ...u }) => u); }
     for (const cu of D.channelUpdates || []) if (cu.item) { const k = dkey(cu.campaign, cu.item.channel); if (acks.includes(k)) cu.item = null; else { if (drafts[k]) cu.item.draft = drafts[k]; delete cu.item.ack; } }
-    const payload = { campaigns: D.campaigns, ...(D.dms ? { dms: D.dms } : {}), ...(D.channelUpdates ? { channelUpdates: D.channelUpdates } : {}), ...(D.scope.mode !== 'all' ? { completeRescans: true } : {}), scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
+    if (D.coaches) D.coaches.items = D.coaches.items.filter(it => !acks.includes('coaches ' + it.channel)).map(it => drafts['coaches ' + it.channel] ? { ...it, draft: drafts['coaches ' + it.channel] } : it);
+    const payload = { campaigns: D.campaigns, ...(D.dms ? { dms: D.dms } : {}), ...(D.coaches ? { coaches: D.coaches } : {}), ...(D.channelUpdates ? { channelUpdates: D.channelUpdates } : {}), ...(D.scope.mode !== 'all' ? { completeRescans: true } : {}), scanStatus: { discord: D.errors.length ? 'partial: ' + D.errors.join('; ') : 'ok', discordAt: new Date().toISOString() } };
     const f = document.createElement('form'); f.method = 'POST'; f.action = 'https://gigca-cm-portal-production.up.railway.app/api/runner/ingest-form'; f.style.display = 'none';
     for (const [k, v] of [['token', token], ['payload', JSON.stringify(payload)]]) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); setTimeout(() => f.submit(), 300); return 'submitting ' + JSON.stringify(payload).length + ' bytes';

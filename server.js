@@ -43,13 +43,14 @@ const RUNNER = path.join(DATA_DIR, 'runner.json'); // Mac Mini heartbeat + last 
 // parts:lp.capcut,dc.artlist,slack (lp = LaunchPoint analytics, dc = Discord messages, for that campaign).
 const CAMPS = ['capcut', 'artlist', 'creatify', 'melius', 'yri'];
 const MINE = ['capcut', 'yri']; // campaigns where Ty is the coach: replies can be sent from the portal
+const SENDABLE = [...MINE, 'coaches']; // plus his replies in the Launchpoint Coaches server
 // Messages queued before sending was turned on were never meant to go out: cancel them once so they can't be sent by surprise.
 { const q = getQueue(); let n = 0;
   q.forEach(a => { if (a.type === 'discord_send' && a.status === 'pending' && !a.live) { a.status = 'cancelled'; a.detail = 'queued before sending was turned on'; n++; } });
   if (n) writeJson(QUEUE, q); }
-const PART = `((lp|dc)\\.(${CAMPS.join('|')})|dms|slack)`;
+const PART = `((lp|dc)\\.(${CAMPS.join('|')})|dms|slack|coaches)`;
 const SCOPE_OK = new RegExp(`^(all|${CAMPS.join('|')}|dms|slack|channel:(${CAMPS.join('|')}):\\d{15,22}|parts:${PART}(,${PART})*)$`);
-const ALL_PARTS = [...CAMPS.map(c => 'lp.' + c), ...CAMPS.map(c => 'dc.' + c), 'dms', 'slack'];
+const ALL_PARTS = [...CAMPS.map(c => 'lp.' + c), ...CAMPS.map(c => 'dc.' + c), 'dms', 'coaches', 'slack'];
 function toParts(s) {
   if (s === 'all') return ALL_PARTS;
   if (CAMPS.includes(s)) return ['lp.' + s, 'dc.' + s];
@@ -120,6 +121,7 @@ app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
   // A reply went out: Ty spoke last in that channel now, so it leaves the waiting list right away instead of at the next scan.
   if (a.type === 'discord_send' && a.status === 'done' && a.channelId) {
     const st = readJson(STATE, null), c = st && (st.campaigns || []).find(x => x.id === a.campaign);
+    if (st && a.campaign === 'coaches' && st.coaches) { st.coaches.items = (st.coaches.items || []).filter(it => it.channelId !== a.channelId); writeJson(STATE, st); }
     if (c) { c.unanswered = (c.unanswered || []).filter(u => u.channelId !== a.channelId);
       const ch = c.discord && c.discord.channels && c.discord.channels[a.channelId]; if (ch) ch.lastStaffMsgAt = a.finishedAt;
       writeJson(STATE, st); }
@@ -149,7 +151,7 @@ function mergeState(inc) {
     const i = cur.campaigns.findIndex(x => x.id === c.id);
     if (i >= 0) cur.campaigns[i] = { ...cur.campaigns[i], ...c }; else cur.campaigns.push(c);
   }
-  for (const k of ['slack', 'dms', 'audits', 'eod', 'accountsCheckedAt']) if (inc[k] !== undefined) cur[k] = inc[k];
+  for (const k of ['slack', 'dms', 'coaches', 'audits', 'eod', 'accountsCheckedAt']) if (inc[k] !== undefined) cur[k] = inc[k];
   for (const u of inc.channelUpdates || []) { // one channel rechecked: replace just that channel's waiting item
     const c = cur.campaigns.find(x => x.id === u.campaign); if (!c) continue;
     const known = ((c.discord || {}).channels || {})[u.channelId] || {};
@@ -197,8 +199,8 @@ app.post('/api/actions', async (req, res) => {
   for (const a of list) {
     if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
     // Sending is only for Ty's own campaigns (CapCut, YRI); every other campaign is oversight.
-    if (a.type === 'discord_send' && (!MINE.includes(a.campaign) || !a.channel || !String(a.text || '').trim()))
-      return res.status(400).json({ error: 'discord_send needs campaign capcut or yri, a channel and text' });
+    if (a.type === 'discord_send' && (!SENDABLE.includes(a.campaign) || (a.campaign === 'coaches' && a.live !== true) || !a.channel || !String(a.text || '').trim()))
+      return res.status(400).json({ error: 'discord_send needs campaign capcut, yri or coaches, a channel and text' });
     // live = really sent by the Mac Mini (replies). Without it the message only waits in the queue, as bulk messages always have.
     const live = a.type === 'discord_send' && a.live === true;
     if (live && (!/^\d{15,22}$/.test(String(a.channelId || '')) || !/^\d{15,22}$/.test(String(a.guildId || ''))))

@@ -14,13 +14,13 @@ The last line of this prompt is "SCOPE=<value>", set by the runner. Use it only 
 - channel:<campaign>:<digits> (campaign is one of the five above; digits is a Discord channel id) -> step 4 for that single channel only; skip steps 3 and 5.
 - dms -> step 4 for DMs only; skip steps 3 and 5.
 - slack -> step 5 only.
-- parts:<comma list> -> only the pieces listed. Each piece is one of: lp.<campaign> (LaunchPoint analytics for that campaign, step 3), dc.<campaign> (Discord messages for that campaign, step 4), dms (Ty's Discord DMs, step 4), slack (step 5). Skip any step with no pieces.
+- parts:<comma list> -> only the pieces listed. Each piece is one of: lp.<campaign> (LaunchPoint analytics for that campaign, step 3), dc.<campaign> (Discord messages for that campaign, step 4), dms (Ty's Discord DMs, step 4), coaches (the Launchpoint Coaches server, step 4), slack (step 5). Skip any step with no pieces.
 Scoped runs put one setup line at the top of the same javascript_exec call as the script, before the script text:
   LaunchPoint, single campaign or parts with lp pieces: window.__lpScope = ['<campaign>', ...];   (all = no line)
   Discord campaign:  window.__discScope = {mode:'campaign', key:'<campaign>'};
   Discord channel:   window.__discScope = {mode:'channel', key:'<campaign>', channelId:'<digits>'};
   Discord dms:       window.__discScope = {mode:'dms'};
-  Discord parts:     window.__discScope = {mode:'parts', keys:['<campaign>', ...], dms:<true if dms is listed, else false>};
+  Discord parts:     window.__discScope = {mode:'parts', keys:['<campaign>', ...], dms:<true if dms is listed, else false>, coaches:<true if coaches is listed, else false>};
 A single channel takes about 15 seconds, DMs about 1 minute, one campaign's Discord 2 to 4 minutes, LaunchPoint about 1 minute.
 
 STEP 1: BROWSER (Mac Mini only)
@@ -34,12 +34,13 @@ javascript_tool notes: a call times out at 45 seconds, so never wait longer than
 STEP 3: LAUNCHPOINT
 Navigate the tab to https://dashboard.launchpointhq.com/campaigns. If it shows a login page, record "LaunchPoint: logged out" and skip to step 4. Otherwise run lp.js (with the __lpScope line first when scoped; it starts in the background). Poll `JSON.stringify({done: window.__lpDone, s: window.__lpSummary})` every 20 to 30 seconds until done is true (about 1 minute), then wait 4 seconds so the upload finishes. Keep the summary (creators, CPM per campaign, errors).
 
-STEP 4: DISCORD (creator channels for CapCut, Artlist, Creatify, Melius, YRI's Team Ty in the UGC University server, plus Ty's DMs)
+STEP 4: DISCORD (creator channels for CapCut, Artlist, Creatify, Melius, YRI's Team Ty in the UGC University server, Ty's DMs, and the Launchpoint Coaches server)
 Navigate the tab to https://discord.com/channels/@me. If it shows a login page, record "Discord: logged out" and skip to step 5. Otherwise run discord.js (with the scope line first when scoped). When SCOPE has no Discord pieces, skip this step. A full run walks about 250 channels and takes 8 to 12 minutes. Poll `JSON.stringify({done: window.__disc.done, progress: window.__disc.progress, errors: window.__disc.errors})` every 30 seconds (every 10 seconds for a single channel) until done is true.
-Then read `window.__disc.mine` (an array of strings, one per creator of Ty's who spoke last and is waiting, on CapCut or YRI: key | hours waiting | what the coach last said | what the creator said). The key is "#channel" for CapCut and "yri #channel" for YRI; use the key exactly as given in drafts and acks. It can be empty. If strings are cut off, read them in slices. Also read `(window.__disc.dms||[]).length`.
+Then read `window.__disc.mine` (an array of strings, one per creator of Ty's who spoke last and is waiting, on CapCut or YRI: key | hours waiting | what the coach last said | what the creator said). The key is "#channel" for CapCut and "yri #channel" for YRI; use the key exactly as given in drafts and acks. It can be empty. If strings are cut off, read them in slices. Also read `(window.__disc.dms||[]).length`, and `window.__disc.coachLines` (an array of strings, one per Launchpoint Coaches channel where a CM, coach or leadership needs Ty: key | hours | why (mention, your channel, leadership, question) | what Ty last said | what they said; the key is "coaches #channel"). It can be empty.
 For each item decide:
  a) it needs no reply (a plain acknowledgment, or the creator already resolved it) -> add its key (for example "#jane-doe" or "yri #zach") to acks; or
  b) write a draft reply for Ty to review. Draft rules: Ty's voice is casual, direct and short (1 to 3 sentences) with one clear next action. Never use "just checking in", "how's it going", "just following up" or "I think so". Never invent campaign rules, pay, deadlines or policy; when a decision or facts are needed, ask the creator for the specifics (links, handles, screenshots) instead. Known CapCut facts you may use, for CapCut items only (for YRI items assume no campaign rules; ask instead): creators are expected to post 3 videos a day; every caption needs #capcut #capcutpioneer #1mincapcut; no paid partnership label is needed; onboarding and 3-on-1 call booking links are in the team-ty-announcements channel; never tell a creator to delete posts. These drafts are only shown on the portal; you send nothing. Ty reviews each one and sends it himself.
+For each coachLines item decide the same way: a) nothing for Ty to answer (it was not really for him, or it is already handled) -> add its key to acks; or b) draft Ty's reply. These go to coaches, CMs and leadership, not creators: answer first, then numbered next steps with times; direct and short; tag @Rich Lin, never RichBot. Never state pay or payout amounts and never reveal the true CPM. When Ty would need facts you don't have, draft a reply that commits to a time and asks for what is missing.
 Then ALWAYS run (even when mine is empty, because this is what uploads the results): `window.discSubmit({"<key>": "draft text", ...}, ["<key>", ...], "TOKEN")` with real values, or `window.discSubmit({}, [], "TOKEN")` when there is nothing to draft. Wait 5 seconds; the tab should now show "ingest ok: ..." on the portal.
 
 STEP 5: SLACK

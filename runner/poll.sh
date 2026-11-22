@@ -70,7 +70,7 @@ fi
 
 [[ -z "$scope" ]] && exit 0                            # nothing to do; this is the normal case
 ids=$(json_get "$resp" ids); [[ -z "$ids" ]] && ids="[]"
-P='((lp|dc)\.(capcut|artlist|creatify|melius|yri)|dms|slack)'
+P='((lp|dc)\.(capcut|artlist|creatify|melius|yri)|dms|slack|coaches)'
 [[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|yri|dms|slack|channel:(capcut|artlist|creatify|melius|yri):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
 
 finish() { # status detail

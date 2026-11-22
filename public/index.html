@@ -130,6 +130,21 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 .readsec{margin-top:14px}.readsec .item{opacity:.6}
 .empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
 
+/* coach ranking */
+.rank{border-bottom:1px solid var(--line)}.rank:last-child{border-bottom:0}
+.rhead{display:grid;grid-template-columns:30px minmax(0,1fr) auto 18px;gap:12px;align-items:center;padding:12px 16px;cursor:pointer;user-select:none}
+.rhead:hover{background:var(--s2)}
+.rk{width:26px;height:26px;border-radius:50%;background:var(--s3);color:var(--t2);display:grid;place-items:center;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}
+.rk.top{background:var(--accbg);color:var(--acc)}
+.rname{font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.rname span{font-weight:400;color:var(--t3);font-size:12px}
+.rbar{display:flex;align-items:center;gap:8px;margin-top:5px}.rbar .tr{flex:1;max-width:240px;height:6px;border-radius:4px;background:var(--s3);overflow:hidden}.rbar .tr i{display:block;height:100%;border-radius:4px}
+.rbar b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;min-width:34px}.rbar .faint{font-size:12px}
+.pips{display:flex;gap:3px;align-items:center}.pips i{width:9px;height:9px;border-radius:50%;background:var(--s3)}.pips i.on{background:var(--red)}
+.pipl{font-size:11px;color:var(--t3);text-align:right;margin-top:3px;white-space:nowrap}
+.chev{color:var(--t3);transition:transform .15s;text-align:center}.rank.open .chev{transform:rotate(90deg)}
+.rbody{padding:0 16px 14px 58px}
+@media(max-width:860px){.rbody{padding-left:16px}}
+
 /* rescan menu */
 .menuwrap{position:relative}
 .menu{position:absolute;right:0;top:calc(100% + 8px);width:420px;max-width:calc(100vw - 32px);background:var(--s1);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);padding:6px;z-index:20;display:none}
@@ -193,7 +208,7 @@ const ICON={
   chat:'<path d="M4 5h16v11H8l-4 4z"/>',
   doc:'<path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/>'};
 const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
-const VIEWS=[['today','Today','today'],['capcut','CapCut','camp'],['artlist','Artlist','camp'],['creatify','Creatify','camp'],['melius','Melius','camp'],['yri','YRI','camp'],['creators','Creators & flags','people'],['slack','Slack & DMs','chat'],['audits','Weekly audits','doc']];
+const VIEWS=[['today','Today','today'],['capcut','CapCut','camp'],['artlist','Artlist','camp'],['creatify','Creatify','camp'],['melius','Melius','camp'],['yri','YRI','camp'],['coaches','Coaches server','chat'],['creators','Creators & flags','people'],['slack','Slack & DMs','chat'],['audits','Weekly audits','doc']];
 // CapCut Discord channels used in the welcome message (<#id> renders as a channel link in Discord).
 const CH={startHere:'1569757043642867835',tyAnn:'1570964214728630322'};
 const CHNAME={[CH.startHere]:'🏁-start-here',[CH.tyAnn]:'team-ty-announcements'};
@@ -221,11 +236,13 @@ const hh=t=>{let h=2166136261;for(const ch of String(t||''))h=Math.imul(h^ch.cha
 const unKey=u=>'u:'+(u.channelId||u.id)+':'+(u.lastAt||'')+':'+hh(u.message);
 const dmKey=m=>'dm:'+m.id+':'+(m.lastAt||'')+':'+hh(m.text);
 const slKey=m=>'s:'+m.channel+':'+(m.lastAt||'')+':'+hh(m.text);
+const coKey=m=>'co:'+m.channelId+':'+(m.lastAt||'')+':'+hh(m.text);
 const isRead=k=>!!(S.read&&S.read[k]);
 function applyRead(){
   S.campaigns.forEach(c=>{const a=c.allUn||c.unanswered;c.unanswered=a.filter(u=>!isRead(unKey(u)));c.readUn=a.filter(u=>isRead(unKey(u)))});
   if(S.allDms){S.dms=S.allDms.filter(m=>!isRead(dmKey(m)));S.readDms=S.allDms.filter(m=>isRead(dmKey(m)))}else S.readDms=[];
   const sl=S.allSlack||[];S.slack=sl.filter(m=>!isRead(slKey(m)));S.readSlack=sl.filter(m=>isRead(slKey(m)));
+  const co=(S.coaches&&S.coaches.items)||[];S.coachItems=co.filter(m=>!isRead(coKey(m)));S.readCoach=co.filter(m=>isRead(coKey(m)));
 }
 async function markRead(key,label,on,extra){
   S.read=S.read||{};
@@ -511,7 +528,7 @@ function describeScope(s,c){
   if(s.startsWith('channel:')){const [,k,id]=s.split(':'),v=((camp(k)||{}).discord||{}).channels||{};return NAMES[k]+' · '+(v[id]?'#'+v[id].name:'one channel')}
   const p=s.slice(6).split(','), out=[];
   CAMPS.forEach(k=>{const lp=p.includes('lp.'+k),dc=p.includes('dc.'+k);if(lp||dc)out.push(NAMES[k]+' '+(lp&&dc?'messages + analytics':dc?'messages':'analytics'))});
-  if(p.includes('dms'))out.push('DMs');if(p.includes('slack'))out.push('Slack');
+  if(p.includes('dms'))out.push('DMs');if(p.includes('coaches'))out.push('Coaches server');if(p.includes('slack'))out.push('Slack');
   return out.join(', ');
 }
 const scans=()=>(S.queue||[]).filter(a=>a.type==='rescan').slice().sort((a,b)=>+new Date(b.finishedAt||b.startedAt||b.createdAt)-+new Date(a.finishedAt||a.startedAt||a.createdAt));
@@ -526,36 +543,57 @@ function lastScans(){
 function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
 function render(){
   const {v,sub}=route(), cc=camp('capcut');
-  const badges={slack:S.slack.length+(S.dms||[]).length};CAMPS.forEach(k=>badges[k]=waitingOn(camp(k)).length);
-  const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${MINE.includes(k)||k==='slack'?'hot':''}">${badges[k]}</span>`:''}</a>`;
+  const badges={slack:S.slack.length+(S.dms||[]).length,coaches:(S.coachItems||[]).length};CAMPS.forEach(k=>badges[k]=waitingOn(camp(k)).length);
+  const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${MINE.includes(k)||k==='slack'||k==='coaches'?'hot':''}">${badges[k]}</span>`:''}</a>`;
   const nC=1+CAMPS.length;
   $('#nav').innerHTML=`<div class="brand"><div class="logo">G</div>GigaCM</div>`+link(VIEWS[0])+'<div class="navsec">Campaigns</div>'+VIEWS.slice(1,nC).map(link).join('')+'<div class="navsec">Everything else</div>'+VIEWS.slice(nC).map(link).join('')+
     `<div class="foot">${live&&S.runner&&S.runner.lastPollAt?(runnerAge()<2?'<span><span class="dot on"></span>Mac Mini online</span>':'<span><span class="dot off"></span>Mac Mini seen '+ago(S.runner.lastPollAt)+'</span>'):''}<span>Full check every 3 hours</span></div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   const ls=lastScans();
-  $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, all four Discords, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
+  $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, every campaign's Discord, the coaches server, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
     nextPill()+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
   $('#banner').innerHTML=offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
-  $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
 }
 const kpi=(v,l,cls='')=>`<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
+
+/* ---------- coach ranking (Today) ---------- */
+// Score = share of SOP checks the coach passes in the chosen timeframe (a "watch" counts half; no-data checks are left out).
+// Strikes = this week's strike risks (strike rules are judged on 7 days). Ranked best first.
+const OPENR=new Set();
+function coachRanking(){
+  const rows=[];CAMPS.forEach(k=>{const c=camp(k);if(c)c.coachNames.forEach(n=>{const a=fullAudit(c,n),w=TF==='7d'?a:fullAudit(c,n,'7d'),g=a.all.filter(x=>x.state!=='na'),ok=g.filter(x=>x.state==='ok').length,wn=g.filter(x=>x.state==='warn').length;
+    rows.push({c,a,strikes:w.strikes,score:g.length?Math.round((ok+wn/2)/g.length*100):null,ok,graded:g.length})})});
+  rows.sort((x,y)=>(y.score??-1)-(x.score??-1)||x.strikes.length-y.strikes.length||x.a.bad-y.a.bad||x.a.name.localeCompare(y.a.name));
+  let h=`<div class="bar" style="margin-top:26px"><h2 style="margin:0">Coach ranking <span class="sub">${rows.length?plural(rows.length,'coach')+' · best first':'no coaches yet'}</span></h2><span class="sp"></span>${tfSeg()}</div>`;
+  if(!rows.length)return h+'<div class="empty">No coach data yet.</div>';
+  return h+`<div class="list">${rows.map((r,i)=>{const {c,a}=r,key=c.id+'|'+a.name,open=OPENR.has(key),col=r.score==null?'var(--t3)':r.score>=85?'var(--grn)':r.score>=60?'var(--amb)':'var(--red)',ns=r.strikes.length,msg=coachMsg(a),fix=a.all.filter(k=>k.state==='bad'),watch=a.all.filter(k=>k.state==='warn');
+    return `<div class="rank ${open?'open':''}"><div class="rhead" data-rank="${esc(key)}"><span class="rk ${i<3&&r.score!=null&&!ns?'top':''}">${i+1}</span>
+      <div style="min-width:0"><div class="rname">${esc(a.name)}<span>${esc(c.name)} · ${plural(a.cr.length,'creator')}</span></div>
+      <div class="rbar"><span class="tr"><i style="width:${r.score??0}%;background:${col}"></i></span><b style="color:${col}">${r.score==null?'—':r.score+'%'}</b><span class="faint">${r.graded?`${r.ok}/${r.graded} on track${fix.length?` · <span class="red">${fix.length} to fix</span>`:''}`:'no data yet'}</span></div></div>
+      <div title="${esc(r.strikes.join('\n')||'No strike risks this week')}"><div class="pips">${Array.from({length:Math.max(3,ns)},(_,j)=>`<i class="${j<ns?'on':''}"></i>`).join('')}</div><div class="pipl">${ns?ns+' strike risk'+(ns>1?'s':''):'no strikes'}</div></div>
+      <span class="chev">›</span></div>
+      ${open?`<div class="rbody">${r.strikes.length?`<div class="hint" style="margin-bottom:6px"><b class="amb">Strike risks this week:</b> ${r.strikes.map(esc).join(' · ')}</div>`:''}
+        ${fix.length||watch.length?`<div class="card checklist">${[...fix,...watch].map(k=>checkRow(k)).join('')}</div>`:'<div class="empty" style="padding:14px">Everything on track for this timeframe.</div>'}
+        <div class="actions">${msg?`<button class="sm pri" data-copyta="rk_${esc(key)}">Copy message to ${esc(first(a.name))}</button>`:''}<a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Full coach page →</a></div>
+        ${msg?`<textarea id="rk_${esc(key)}" style="min-height:120px;margin-top:8px">${esc(msg)}</textarea>`:''}</div>`:''}</div>`}).join('')}</div>`;
+}
 
 function vToday(){
   const rows=all(), cc=camp('capcut'), mine=rows.filter(r=>r.c.id==='capcut');
   const st=k=>rows.filter(r=>cstat(r.c,r.x).k===k).length;
   let h='<div class="kpis">'+
     kpi(MINE.reduce((n,k)=>n+waitingOn(camp(k)).length,0),'Your creators waiting on you',MINE.some(k=>waitingOn(camp(k)).length)?'red':'')+
+    kpi(`<a href="#coaches" style="text-decoration:none">${(S.coachItems||[]).length}</a>`,'Coaches server: need your reply',(S.coachItems||[]).length?'red':'')+
     kpi(S.slack.length+(S.dms||[]).length,'Slack + Discord DMs to answer',S.slack.length+(S.dms||[]).length?'amb':'')+
     kpi(cc?newJoiners(cc).filter(r=>r.needs).length:0,'New creators to welcome','blu')+
     kpi(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
     kpi(st('warming'),'Warming up (all campaigns)','blu')+
     kpi(rows.filter(r=>has(r,'cut')).length,'Cut candidates')+'</div>';
-  const coachRows=[];CAMPS.forEach(k=>{const c=camp(k);if(c)c.coachNames.forEach(n=>{const a=fullAudit(c,n);if(a.bad||a.strikes.length)coachRows.push({c,a})})});
-  h+=`<div class="bar" style="margin-top:26px"><h2 style="margin:0">Coaches to message <span class="sub">${coachRows.length?plural(coachRows.length,'coach'):'nobody'}</span></h2><span class="sp"></span>${tfSeg()}</div>`;
-  h+=coachRows.length?`<div class="tw"><table><thead><tr><th>Coach</th><th>Campaign</th><th>Needs action</th><th>Strike risk</th><th></th></tr></thead><tbody>${coachRows.sort((a,b)=>b.a.bad-a.a.bad).map(({c,a})=>`<tr><td><b>${esc(a.name)}</b></td><td class="mute">${esc(c.name)}</td><td>${a.all.filter(k=>k.state==='bad').map(k=>`<span class="tag red">${esc(k.label.replace(/ \(.*\)/,''))}</span>`).join(' ')}</td><td>${a.strikes.map(s=>`<span class="tag amb">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Open →</a></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Every coach is on track.</div>';
+  h+=coachRanking();
   h+='<h2>Campaigns</h2><div class="cards">';
   for(const c of S.campaigns){
     const sts=c.creators.map(x=>cstat(c,x).k), cnt=k=>sts.filter(s=>s===k).length;
@@ -579,7 +617,7 @@ function vToday(){
 function vCampaign(id,sub){
   const c=camp(id); if(!c)return `<div class="empty">No ${NAMES[id]} data yet.</div>`;
   const cap=MINE.includes(id), audits=c.coachNames.map(n=>fullAudit(c,n));
-  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],...(c.creators.length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
+  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],...(c.creators.length||newJoiners(c).length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
     ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],
     ...audits.map(a=>['coach:'+a.name,first(a.name),a.bad,a.bad>0]),
     ['posts',"Didn't post",null],['warm','Warming up',c.creators.filter(x=>cstat(c,x).k==='warming').length,false],
@@ -621,21 +659,25 @@ function vReply(c){
   return h+'</div>'+rd;
 }
 
+// Campaigns without LaunchPoint data (YRI) get their new creators from the Discord channels made in the last 7 days.
+const pretty=n=>String(n||'').split(/[-_]+/).filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
+const WELCOME={capcut:TEMPLATES.welcome.text,yri:"Hey {first}, excited to have you on YRI! Get your accounts set up and lmk once they're made, then we'll get your first post going"};
+let WLT={};
 function newJoiners(c){
-  const now=Date.now();
-  return c.creators.map(x=>{const ch=chInfo(c,x), j=joinedAt(x);return {x,ch,j,needs:!!x.channelId&&!(ch&&(ch.firstStaffAt||ch.lastStaffMsgAt))}}).filter(r=>r.j&&now-r.j<=7*DAY).sort((a,b)=>b.j-a.j);
+  const now=Date.now(), src=c.creators.length?c.creators:Object.entries((c.discord||{}).channels||{}).filter(([id,v])=>!v.general&&snow(id)&&now-snow(id)<=7*DAY).map(([id,v])=>({id,name:pretty(v.name),channel:'#'+v.name,channelId:id,coach:v.coach,pseudo:true}));
+  return src.map(x=>{const ch=chInfo(c,x), j=joinedAt(x);return {x,ch,j,needs:!!x.channelId&&!(ch&&(ch.firstStaffAt||ch.lastStaffMsgAt))}}).filter(r=>r.j&&now-r.j<=7*DAY).sort((a,b)=>b.j-a.j);
 }
 function vNew(c){
   const rows=newJoiners(c), shown=rows.filter(r=>byWho(c,r.x.coach)), need=shown.filter(r=>r.needs), ok=shown.filter(r=>!r.needs);
-  const tpl=$('#wl_text')?$('#wl_text').value:TEMPLATES.welcome.text;
+  const tpl=$('#wl_text')&&$('#wl_text').dataset.c===c.id?$('#wl_text').value:WLT[c.id]||WELCOME[c.id]||WELCOME.yri, gid=c.guildId||GUILD[c.id];
   let h=`<div class="bar">${whoSeg(c,rows,k=>rows.filter(r=>(k==='all'||r.x.coach===k)&&r.needs).length)}</div>
   <div class="card"><h3>Welcome message <span class="hint" style="font-weight:400">{first} becomes their first name · channel links stay clickable in Discord</span></h3>
-  <textarea id="wl_text">${esc(tpl)}</textarea><div class="preview" id="wl_prev" style="margin-top:8px">${mentions(fill(tpl,'Jordan'))}</div></div>`;
+  <textarea id="wl_text" data-c="${c.id}">${esc(tpl)}</textarea><div class="preview" id="wl_prev" style="margin-top:8px">${mentions(fill(tpl,'Jordan'))}</div></div>`;
   h+=`<h2>Needs a welcome <span class="sub">${need.length} · joined in the last 7 days, no coach message yet</span></h2>`;
   h+=need.length?`<div class="list">${need.map(r=>`<div class="item ${copied.has('w'+r.x.id)?'done':''}">${av(r.x.name)}<div><div class="ihead"><b>${esc(r.x.name)}</b><span class="meta">${esc(r.x.channel||'')} · ${esc(r.x.coach)}</span><span class="sp"></span><span class="tag ${Date.now()-r.j>24*H?'red':'blu'}">joined ${ago(new Date(r.j))}</span></div>
-    <div class="actions"><button class="pri sm" data-welcome="${esc(r.x.id)}" data-camp="${c.id}">${copied.has('w'+r.x.id)?'Copied ✓ · copy again':'Copy welcome & open channel'}</button><span class="hint">${Date.now()-r.j>24*H?'Over 24h: SOP says contact within 24h':'Contact within 24h of joining'}</span></div></div></div>`).join('')}</div>`:'<div class="empty">Everyone new has been welcomed.</div>';
+    <div class="actions">${(()=>{const sd=sendOf(c,{channelId:r.x.channelId,lastAt:0}),busy=sd&&(sd.status==='pending'||sd.status==='running');return gid&&r.x.channelId?`<button class="pri sm" data-sendwelcome="${esc(r.x.id)}" data-camp="${c.id}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send welcome'}</button>${sd?sendTag(sd):''}<button class="sm" data-welcome="${esc(r.x.id)}" data-camp="${c.id}">${copied.has('w'+r.x.id)?'Copied ✓':'Copy & open'}</button>`:`<button class="pri sm" data-welcome="${esc(r.x.id)}" data-camp="${c.id}">${copied.has('w'+r.x.id)?'Copied ✓ · copy again':'Copy welcome & open channel'}</button>`})()}<span class="hint">${Date.now()-r.j>24*H?'Over 24h: SOP says contact within 24h':'Contact within 24h of joining'}</span></div></div></div>`).join('')}</div>`:'<div class="empty">Everyone new has been welcomed.</div>';
   h+=`<h2>Already contacted <span class="sub">${ok.length}</span></h2>`;
-  if(ok.length)h+=`<div class="tw"><table><thead><tr><th>Creator</th><th>Coach</th><th>Joined</th><th>First coach message</th><th>Status</th></tr></thead><tbody>${ok.map(r=>{const f=r.ch.firstStaffAt||r.ch.lastStaffMsgAt,s=cstat(c,r.x);return `<tr><td><b>${esc(r.x.name)}</b> <span class="faint">${esc(r.x.channel||'')}</span></td><td class="mute">${esc(r.x.coach)}</td><td class="mute">${ago(new Date(r.j))}</td><td>${r.ch.firstStaffAt?`<span class="${+new Date(f)-r.j>24*H?'red':'grn'}">${wait((+new Date(f)-r.j)/60000)} after joining</span>`:`<span class="mute">last ${ago(f)}</span>`}</td><td><span class="tag ${STAT[s.k][1]}">${STAT[s.k][0]}</span></td></tr>`}).join('')}</tbody></table></div>`;
+  if(ok.length)h+=`<div class="tw"><table><thead><tr><th>Creator</th><th>Coach</th><th>Joined</th><th>First coach message</th><th>Status</th></tr></thead><tbody>${ok.map(r=>{const f=r.ch.firstStaffAt||r.ch.lastStaffMsgAt,s=r.x.pseudo?{k:'posting'}:cstat(c,r.x);return `<tr><td><b>${esc(r.x.name)}</b> <span class="faint">${esc(r.x.channel||'')}</span></td><td class="mute">${esc(r.x.coach)}</td><td class="mute">${ago(new Date(r.j))}</td><td>${r.ch.firstStaffAt?`<span class="${+new Date(f)-r.j>24*H?'red':'grn'}">${wait((+new Date(f)-r.j)/60000)} after joining</span>`:`<span class="mute">last ${ago(f)}</span>`}</td><td>${r.x.pseudo?'<span class="faint">no LaunchPoint data</span>':`<span class="tag ${STAT[s.k][1]}">${STAT[s.k][0]}</span>`}</td></tr>`}).join('')}</tbody></table></div>`;
   return h;
 }
 
@@ -741,6 +783,25 @@ function vQueue(id){
   return QNOTE+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td>${a.live?sendTag(a):`<span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status==='pending'?'queued, not sent':a.status)}</span>`}${a.detail&&!a.live?` <span class="faint">${esc(a.detail)}</span>`:''}</td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
 }
 
+/* ---------- Launchpoint Coaches server ---------- */
+const COKIND={mention:['@ you','red'],'your channel':['Your channel','acc'],leadership:['Leadership','amb'],question:['Unanswered question','']};
+const coGroup=it=>{const c=it.category||'';const k=CAMPS.find(k=>new RegExp(NAMES[k],'i').test(c));return k?NAMES[k]:/ugc op|\bops\b|admin/i.test(c)?'Ops':c.replace(/[^\p{L}\p{N} ]/gu,'').trim()||'Other'};
+let COF='all';
+function vCoaches(){
+  const C=S.coaches, all=S.coachItems||[], G=(C&&C.guildId)||'1552479657566142566';
+  const head=`<div class="bar"><span class="hint">${C?`${C.channels} channels checked ${ago(C.scannedAt)}`:'Not scanned yet'} · CMs, coaches and leadership asking you something: @mentions, replies to you, your #ty-mcguire channel, leadership asks, and questions nobody has answered</span><span class="sp"></span><button class="sm" data-rescan="parts:coaches">↻ Recheck coaches server</button></div>`;
+  if(!C)return head+'<div class="empty">The Launchpoint Coaches server is checked in every full check. Run one, or press Recheck.</div>';
+  const groups=[...new Set(all.map(coGroup))], cur=COF==='all'||groups.includes(COF)?COF:'all', list=all.filter(it=>cur==='all'||coGroup(it)===cur).sort((a,b)=>b.waitingMin-a.waitingMin);
+  let h=head+`<div class="bar"><div class="seg">${[['all','Everything'],...groups.map(g=>[g,g])].map(([k,l])=>{const n=all.filter(it=>k==='all'||coGroup(it)===k);return `<span class="${cur===k?'on':''}" data-cof="${esc(k)}">${esc(l)}<i class="${n.some(it=>it.kind==='mention'||it.kind==='your channel')?'red':''}">${n.length}</i></span>`}).join('')}</div></div>`;
+  const pc={id:'coaches'}, row=(it,extra)=>{const url=`https://discord.com/channels/${G}/${it.channelId}${it.messageId?'/'+it.messageId:''}`,sd=sendOf(pc,it),busy=sd&&(sd.status==='pending'||sd.status==='running'),k=COKIND[it.kind]||[it.kind,''];
+    return `<div class="item">${av(it.from)}<div><div class="ihead"><b>${esc(it.people&&it.people.length>1?it.people.join(', '):it.from)}</b><span class="meta">${esc(it.channel)} · ${esc(it.category)}</span><span class="tag ${k[1]}">${esc(k[0])}</span><span class="sp"></span><span class="tag ${waitCls(it.waitingMin)}">${wait(it.waitingMin)}</span></div>
+    <div class="quote">${mentions(it.text)}</div>${it.context?`<div class="ctx">You last said: ${esc(it.context)}</div>`:''}
+    ${extra?`<div class="actions"><a class="lk" href="${esc(url)}" target="_blank" rel="noopener">Open message ↗</a><span class="sp"></span>${extra}</div>`:`<textarea id="d_${esc(it.id)}" style="margin-top:10px" placeholder="Write a reply…" ${busy?'disabled':''}>${esc(busy?sd.text:it.draft||'')}</textarea>
+    <div class="actions"><button class="pri sm" data-sendcoach="${esc(it.id)}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send'}</button><button class="sm" data-copyreply="${esc(it.id)}" data-url="${esc(url)}">${copied.has(it.id)?'Copied ✓':'Copy & open'}</button>${sd?sendTag(sd):''}<a class="lk" href="${esc(url)}" target="_blank" rel="noopener">Open message ↗</a><span class="sp"></span>${readBtn(coKey(it),it.from+' '+it.channel)}<span class="hint">${it.draft?'AI draft':''}</span></div>`}</div></div>`};
+  h+=list.length?`<p class="lede">${plural(list.length,'thread')} waiting on you${cur==='all'?'':' in '+esc(cur)}. Send posts your reply in that channel from the Mac Mini, as you.</p><div class="list">${list.map(it=>row(it)).join('')}</div>`:'<div class="empty">Nothing in the coaches server needs you right now.</div>';
+  return h+readSection(S.readCoach||[],coKey,(it,btn)=>row(it,btn));
+}
+
 /* ---------- other pages ---------- */
 function vCreators(){
   const FL=[['all','All'],['missed','Missed yesterday'],['idle3','3+ days idle'],['today','No post today'],['warming','Warming up'],['noposts','No first post'],['health','Red health'],['nodiscord','Not in Discord'],['lowviews','Low views'],['cut','Cut candidates'],['scale','Offer 5/day']];
@@ -777,6 +838,7 @@ function renderMenu(){
   <div class="msec"><div class="h">Pick what to check</div><div class="cbgrid"><span></span><span class="hd">Messages</span><span class="hd">Analytics</span>
   ${CAMPS.map(k=>`<label>${NAMES[k]}</label><span class="cc"><input type="checkbox" data-part="dc.${k}" ${keep.has('dc.'+k)?'checked':''}></span><span class="cc"><input type="checkbox" data-part="lp.${k}" ${keep.has('lp.'+k)?'checked':''}></span>`).join('')}
   <label><input type="checkbox" data-part="dms" ${keep.has('dms')?'checked':''}> Discord DMs</label><span></span><span></span>
+  <label><input type="checkbox" data-part="coaches" ${keep.has('coaches')?'checked':''}> Launchpoint Coaches server</label><span></span><span></span>
   <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
   <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
   <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
@@ -784,14 +846,14 @@ function renderMenu(){
 
 /* ---------- progress bar ---------- */
 function phasesFor(scope){
-  if(scope==='all')return [['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',11,'discordAt'],['slack','Slack',1.5,'finishedAt']];
+  if(scope==='all')return [['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',14,'discordAt'],['slack','Slack',1.5,'finishedAt']];
   if(/^channel:/.test(scope))return [['discord','Discord channel',2.5,'finishedAt']];
   if(scope==='dms')return [['discord','Discord DMs',3,'finishedAt']];
   if(scope==='slack')return [['slack','Slack',3,'finishedAt']];
   const p=CAMPS.includes(scope)?['lp.'+scope,'dc.'+scope]:scope.slice(6).split(','), out=[];
-  const lp=p.filter(x=>x.startsWith('lp.')).length, dc=p.filter(x=>x.startsWith('dc.')).length, dms=p.includes('dms'), sl=p.includes('slack');
+  const lp=p.filter(x=>x.startsWith('lp.')).length, dc=p.filter(x=>x.startsWith('dc.')).length, dms=p.includes('dms'), co=p.includes('coaches'), sl=p.includes('slack');
   if(lp)out.push(['lp','LaunchPoint',2+lp*.4,'lpAt']);
-  if(dc||dms)out.push(['discord','Discord',(out.length?0:2)+dc*3+(dms?1:0),'discordAt']);
+  if(dc||dms||co)out.push(['discord','Discord',(out.length?0:2)+dc*3+(dms?1:0)+(co?3:0),'discordAt']);
   if(sl)out.push(['slack','Slack',(out.length?0:2)+1.5,'at']);
   return out.length?out:[['x','Scan',3,'finishedAt']];
 }
@@ -845,7 +907,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
@@ -854,8 +916,16 @@ document.addEventListener('click',async e=>{
   else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
     if(!u)return;if(!text.trim())return toast('Write a reply first');if(text.length>2000)return toast('Too long: Discord allows 2000 characters');
     if(await act([{type:'discord_send',live:true,campaign:c.id,creator:u.creator,channel:u.channel,channelId:u.channelId,guildId:c.guildId||GUILD[c.id],text}])){toast(live?'Queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
+  else if(d.cof){COF=d.cof;render()}
+  else if(d.rank){OPENR.has(d.rank)?OPENR.delete(d.rank):OPENR.add(d.rank);render()}
+  else if(d.sendcoach){const it=(S.coachItems||[]).find(x=>x.id===d.sendcoach),ta=$('#d_'+CSS.escape(d.sendcoach)),text=ta?ta.value:'';
+    if(!it)return;if(!text.trim())return toast('Write a reply first');if(text.length>2000)return toast('Too long: Discord allows 2000 characters');
+    if(await act([{type:'discord_send',live:true,campaign:'coaches',creator:it.from,channel:it.channel,channelId:it.channelId,guildId:(S.coaches||{}).guildId||'1552479657566142566',text}])){toast(live?'Queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
+  else if(d.sendwelcome){const c=camp(d.camp),r=newJoiners(c).find(y=>y.x.id===d.sendwelcome);if(!r)return;const text=fill($('#wl_text').value,r.x.name);
+    if(!text.trim())return toast('Write the welcome first');
+    if(await act([{type:'discord_send',live:true,campaign:c.id,creator:r.x.name,channel:r.x.channel,channelId:r.x.channelId,guildId:c.guildId||GUILD[c.id],text}])){toast(live?'Welcome queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
   else if(d.copyreply){const text=$('#d_'+CSS.escape(d.copyreply)).value;if(!text.trim())return toast('Write a reply first');if(await copy(text)){copied.add(d.copyreply);toast('Reply copied · paste it in Discord');if(d.url)window.open(d.url,'_blank','noopener');render()}}
-  else if(d.welcome){const c=camp(d.camp),x=c.creators.find(y=>y.id===d.welcome),text=fill($('#wl_text').value,x.name);if(await copy(text)){copied.add('w'+x.id);toast('Welcome copied · paste it in '+(x.channel||'their channel'));const u=chanUrl(c,x.channelId);if(u)window.open(u,'_blank','noopener');render()}}
+  else if(d.welcome){const c=camp(d.camp),x=newJoiners(c).map(r=>r.x).find(y=>y.id===d.welcome),text=fill($('#wl_text').value,x.name);if(await copy(text)){copied.add('w'+x.id);toast('Welcome copied · paste it in '+(x.channel||'their channel'));const u=chanUrl(c,x.channelId);if(u)window.open(u,'_blank','noopener');render()}}
   else if(d.copyta){if(await copy($('#'+CSS.escape(d.copyta)).value))toast('Copied')}
   else if(d.bulk){sendTo([...document.querySelectorAll('.pick_'+d.bulk+':checked')].map(i=>i.value),$('#bt_'+d.bulk).value)}
   else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&x.channel&&(a==='all'||(x.postsToday===0&&['posting','idle'].includes(cstat(c,x).k)))).map(x=>x.id),$('#mm_text').value)}
@@ -876,7 +946,7 @@ document.addEventListener('change',e=>{
   else if(d.all)document.querySelectorAll('.pick_'+d.all).forEach(i=>i.checked=t.checked);
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
 });
-document.addEventListener('input',e=>{if(e.target.id==='wl_text')$('#wl_prev').innerHTML=mentions(fill(e.target.value,'Jordan'))});
+document.addEventListener('input',e=>{if(e.target.id==='wl_text'){WLT[e.target.dataset.c]=e.target.value;$('#wl_prev').innerHTML=mentions(fill(e.target.value,'Jordan'))}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#menu').classList.remove('on')});
 addEventListener('hashchange',()=>{render();scrollTo(0,0)});
 load();
