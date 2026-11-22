@@ -39,7 +39,27 @@ app.post('/login', (req, res) => {
 
 // --- runner API (Mac Mini) ---
 const RUNNER = path.join(DATA_DIR, 'runner.json'); // Mac Mini heartbeat + last scheduled slot
-const SCOPE_OK = /^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):\d{15,22})$/;
+// Scopes: all | <campaign> | dms | slack | channel:<campaign>:<id> | parts:<list> where the list picks pieces, e.g.
+// parts:lp.capcut,dc.artlist,slack (lp = LaunchPoint analytics, dc = Discord messages, for that campaign).
+const CAMPS = ['capcut', 'artlist', 'creatify', 'melius'];
+const PART = `((lp|dc)\\.(${CAMPS.join('|')})|dms|slack)`;
+const SCOPE_OK = new RegExp(`^(all|${CAMPS.join('|')}|dms|slack|channel:(${CAMPS.join('|')}):\\d{15,22}|parts:${PART}(,${PART})*)$`);
+const ALL_PARTS = [...CAMPS.map(c => 'lp.' + c), ...CAMPS.map(c => 'dc.' + c), 'dms', 'slack'];
+function toParts(s) {
+  if (s === 'all') return ALL_PARTS;
+  if (CAMPS.includes(s)) return ['lp.' + s, 'dc.' + s];
+  if (s === 'dms' || s === 'slack') return [s];
+  if (s.startsWith('channel:')) return ['dc.' + s.split(':')[1]];
+  return s.slice(6).split(',');
+}
+// One run covers every waiting request: a single scope runs as is, several are merged into the pieces they need.
+function mergeScopes(list) {
+  const u = [...new Set(list)];
+  if (u.length === 1) return normScope(u[0]);
+  return partsScope(new Set(u.flatMap(toParts)));
+}
+const partsScope = set => ALL_PARTS.every(p => set.has(p)) ? 'all' : 'parts:' + ALL_PARTS.filter(p => set.has(p)).join(',');
+const normScope = s => s.startsWith('parts:') ? partsScope(new Set(toParts(s))) : s;
 // Full scans at :43 past these hours, Chicago time. The Mac Mini asks every 30s; the portal decides when a scheduled scan is due.
 const SCHEDULE = { tz: 'America/Chicago', hours: [8, 11, 14, 17, 20, 23], minute: 43 };
 function dueSlot(now = new Date()) {
@@ -61,8 +81,7 @@ app.post('/api/runner/claim', runnerAuth, (req, res) => {
     q.push(a); picked = [a]; rn.lastSlot = slot;
   }
   if (!picked.length) { writeJson(RUNNER, rn); return res.json({ scope: null }); }
-  const scopes = [...new Set(picked.map(a => SCOPE_OK.test(String(a.scope || 'all')) ? String(a.scope || 'all') : 'all'))];
-  const scope = scopes.length === 1 ? scopes[0] : 'all';
+  const scope = mergeScopes(picked.map(a => SCOPE_OK.test(String(a.scope || 'all')) ? String(a.scope || 'all') : 'all'));
   picked.forEach(a => { a.status = 'running'; a.startedAt = now; a.runScope = scope; });
   if (scope === 'all' && slot) rn.lastSlot = slot; // a manual full scan in the slot window counts as the scheduled one
   writeJson(QUEUE, q); writeJson(RUNNER, rn);
@@ -145,7 +164,8 @@ app.post('/api/actions', async (req, res) => {
   }
   // Rescans wait in the queue until the Mac Mini claims them (it asks every 30s). Only fixed scope formats are accepted,
   // and a scope that is already waiting is not queued twice.
-  const keep = out.filter(a => a.type !== 'rescan' || (SCOPE_OK.test(String(a.scope || 'all')) && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
+  out.forEach(a => { if (a.type === 'rescan' && SCOPE_OK.test(String(a.scope || 'all'))) a.scope = normScope(String(a.scope || 'all')); });
+  const keep = out.filter(a => a.type !== 'rescan' || (SCOPE_OK.test(a.scope || 'all') && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
   keep.forEach(a => { if (a.type === 'rescan') a.scope = a.scope || 'all'; });
   writeJson(QUEUE, q.concat(keep));
   res.json({ queued: keep, runner: readJson(RUNNER, {}) });

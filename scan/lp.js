@@ -1,6 +1,6 @@
 // LaunchPoint scan. Run in a dashboard.launchpointhq.com tab (Claude in Chrome, Mac Mini).
 // Reads the dashboard's own same-origin API, then posts results to the portal through a hidden form.
-// Replace __TOKEN__ with the runner token before injecting. Result summary lands in window.__lpSummary.
+// Replace __TOKEN__ with the runner token before injecting. Optional: window.__lpScope = ['capcut', ...] scans only those. Result summary lands in window.__lpSummary.
 (async () => {
   const PORTAL = 'https://gigca-cm-portal-production.up.railway.app/api/runner/ingest-form', TOKEN = '__TOKEN__';
   const CAMPAIGNS = [
@@ -59,7 +59,8 @@
     };
   }
   const out = [], errs = {};
-  for (const [id, name, cid, role] of CAMPAIGNS) { try { out.push(await scan(id, name, cid, role)); } catch (e) { errs[cid] = String(e); } }
+  const only = Array.isArray(window.__lpScope) && window.__lpScope.length ? window.__lpScope : null; // optional: just these campaigns
+  for (const [id, name, cid, role] of CAMPAIGNS.filter(x => !only || only.includes(x[2]))) { try { out.push(await scan(id, name, cid, role)); } catch (e) { errs[cid] = String(e); } }
   window.__lpSummary = { errs, campaigns: out.map(c => ({ name: c.name, creators: c.creators.length, cpm: c.cpm, cpmAllTime: c.cpmAllTime, viewsAllTime: c.viewsAllTime, spendAllTime: c.spendAllTime })) };
   if (out.length) {
     let fr = document.getElementById('__pf'); if (!fr) { fr = document.createElement('iframe'); fr.name = '__pf'; fr.id = '__pf'; fr.style.display = 'none'; document.body.appendChild(fr); }

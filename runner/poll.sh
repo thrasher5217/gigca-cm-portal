@@ -44,7 +44,8 @@ resp=$(curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Typ
 scope=$(json_get "$resp" scope)
 [[ -z "$scope" ]] && exit 0                            # nothing to do; this is the normal case
 ids=$(json_get "$resp" ids); [[ -z "$ids" ]] && ids="[]"
-[[ "$scope" =~ '^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):[0-9]{15,22})$' ]] || scope=all
+P='((lp|dc)\.(capcut|artlist|creatify|melius)|dms|slack)'
+[[ "$scope" =~ "^(all|capcut|artlist|creatify|melius|dms|slack|channel:(capcut|artlist|creatify|melius):[0-9]{15,22}|parts:$P(,$P)*)\$" ]] || scope=all
 
 finish() { # status detail
   local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({ids:JSON.parse(a[0]),status:a[1],detail:a[2]})}' "$ids" "$1" "$2")

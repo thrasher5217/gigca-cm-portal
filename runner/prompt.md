@@ -9,16 +9,19 @@ HARD RULES
 
 STEP 0: SCOPE
 The last line of this prompt is "SCOPE=<value>", set by the runner. Use it only if it exactly matches one of these forms; otherwise use all.
-- all -> steps 3, 4 and 5.
-- capcut | artlist | creatify | melius -> step 3, then step 4 for that one campaign; skip step 5.
+- all -> steps 3, 4 and 5, everything.
+- capcut | artlist | creatify | melius -> step 3 for that one campaign, then step 4 for that one campaign; skip step 5.
 - channel:<campaign>:<digits> (campaign is one of the four above; digits is a Discord channel id) -> step 4 for that single channel only; skip steps 3 and 5.
 - dms -> step 4 for DMs only; skip steps 3 and 5.
 - slack -> step 5 only.
-For a scoped Discord run, put this line at the top of the same javascript_exec call as the discord.js text, before the script:
-  campaign: window.__discScope = {mode:'campaign', key:'<campaign>'};
-  channel:  window.__discScope = {mode:'channel', key:'<campaign>', channelId:'<digits>'};
-  dms:      window.__discScope = {mode:'dms'};
-A single channel takes about 15 seconds, DMs about 1 minute, one campaign 2 to 4 minutes.
+- parts:<comma list> -> only the pieces listed. Each piece is one of: lp.<campaign> (LaunchPoint analytics for that campaign, step 3), dc.<campaign> (Discord messages for that campaign, step 4), dms (Ty's Discord DMs, step 4), slack (step 5). Skip any step with no pieces.
+Scoped runs put one setup line at the top of the same javascript_exec call as the script, before the script text:
+  LaunchPoint, single campaign or parts with lp pieces: window.__lpScope = ['<campaign>', ...];   (all = no line)
+  Discord campaign:  window.__discScope = {mode:'campaign', key:'<campaign>'};
+  Discord channel:   window.__discScope = {mode:'channel', key:'<campaign>', channelId:'<digits>'};
+  Discord dms:       window.__discScope = {mode:'dms'};
+  Discord parts:     window.__discScope = {mode:'parts', keys:['<campaign>', ...], dms:<true if dms is listed, else false>};
+A single channel takes about 15 seconds, DMs about 1 minute, one campaign's Discord 2 to 4 minutes, LaunchPoint about 1 minute.
 
 STEP 1: BROWSER (Mac Mini only)
 Use the Claude in Chrome tools (load them with one ToolSearch call: list_connected_browsers, select_browser, tabs_context_mcp, tabs_create_mcp, navigate, javascript_tool, tabs_close_mcp). If you have no Claude in Chrome tools at all, stop and end with: "RESULT: failed - no Claude in Chrome tools". Call list_connected_browsers and call select_browser with deviceId 901fbec1-ee36-465a-acee-5c71701b2a9a. That is the Chrome on Ty's Mac Mini. The other browser, deviceId 2227089d-4520-4eee-834e-33364ec2da0d, is his MacBook Air: never use it. Ignore the "Browser 1/2" labels and any onThisComputer or inUse marks; go by deviceId only. If 901fbec1-ee36-465a-acee-5c71701b2a9a is not in the list, do NOT use any other browser: stop and end with "RESULT: failed - the Mac Mini's Chrome is not connected".
@@ -29,10 +32,10 @@ You were started in a checkout of the portal repository. Read scan/lp.js, scan/d
 javascript_tool notes: a call times out at 45 seconds, so never wait longer than 30 seconds inside one call; poll instead. Output is truncated at about 1,000 characters per string and 100 array items.
 
 STEP 3: LAUNCHPOINT
-Navigate the tab to https://dashboard.launchpointhq.com/campaigns. If it shows a login page, record "LaunchPoint: logged out" and skip to step 4. Otherwise run lp.js (it starts in the background). Poll `JSON.stringify({done: window.__lpDone, s: window.__lpSummary})` every 20 to 30 seconds until done is true (about 1 minute), then wait 4 seconds so the upload finishes. Keep the summary (creators, CPM per campaign, errors).
+Navigate the tab to https://dashboard.launchpointhq.com/campaigns. If it shows a login page, record "LaunchPoint: logged out" and skip to step 4. Otherwise run lp.js (with the __lpScope line first when scoped; it starts in the background). Poll `JSON.stringify({done: window.__lpDone, s: window.__lpSummary})` every 20 to 30 seconds until done is true (about 1 minute), then wait 4 seconds so the upload finishes. Keep the summary (creators, CPM per campaign, errors).
 
 STEP 4: DISCORD (creator channels for CapCut, Artlist, Creatify, Melius, plus Ty's DMs)
-Navigate the tab to https://discord.com/channels/@me. If it shows a login page, record "Discord: logged out" and skip to step 5. Otherwise run discord.js (with the scope line first when scoped). A full run walks about 250 channels and takes 8 to 12 minutes. Poll `JSON.stringify({done: window.__disc.done, progress: window.__disc.progress, errors: window.__disc.errors})` every 30 seconds (every 10 seconds for a single channel) until done is true.
+Navigate the tab to https://discord.com/channels/@me. If it shows a login page, record "Discord: logged out" and skip to step 5. Otherwise run discord.js (with the scope line first when scoped). When SCOPE has no Discord pieces, skip this step. A full run walks about 250 channels and takes 8 to 12 minutes. Poll `JSON.stringify({done: window.__disc.done, progress: window.__disc.progress, errors: window.__disc.errors})` every 30 seconds (every 10 seconds for a single channel) until done is true.
 Then read `window.__disc.mine` (an array of strings, one per CapCut creator who spoke last and is waiting: channel | hours waiting | what the coach last said | what the creator said). It can be empty. If strings are cut off, read them in slices. Also read `(window.__disc.dms||[]).length`.
 For each item decide:
  a) it needs no reply (a plain acknowledgment, or the creator already resolved it) -> add its channel (for example "#jane-doe") to acks; or

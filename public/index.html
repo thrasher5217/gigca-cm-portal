@@ -3,132 +3,352 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GigaCM Portal</title>
+<title>GigaCM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0d0f11;--panel:#15181c;--panel2:#1b1f24;--line:#262b32;--text:#e8eaed;--mute:#8b949e;--acc:#c8f560;--red:#ff6b6b;--amb:#f5b942;--grn:#5ad68a;--blu:#6cb6ff}
+:root{
+  --bg:#0a0b0d;--side:#0d0e11;--s1:#121317;--s2:#17181d;--s3:#1d1f25;--line:rgba(255,255,255,.065);--line2:rgba(255,255,255,.11);
+  --text:#ededef;--t2:#9a9ca5;--t3:#62646d;--acc:#8b93ff;--acc2:#6f78f5;--accbg:rgba(139,147,255,.12);
+  --grn:#46c48a;--grnbg:rgba(70,196,138,.12);--amb:#e7a33e;--ambbg:rgba(231,163,62,.12);--red:#f06464;--redbg:rgba(240,100,100,.12);--blu:#5fa8f5;--blubg:rgba(95,168,245,.12);
+  --r:10px;--shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme:light){:root{
+  --bg:#fbfbfc;--side:#f4f4f6;--s1:#ffffff;--s2:#f6f6f8;--s3:#eeeef1;--line:rgba(10,12,20,.08);--line2:rgba(10,12,20,.14);
+  --text:#16171b;--t2:#5e616b;--t3:#9a9ca5;--acc:#5b63e6;--acc2:#4a52d4;--accbg:rgba(91,99,230,.09);
+  --grn:#1f9d63;--grnbg:rgba(31,157,99,.1);--amb:#b7770f;--ambbg:rgba(183,119,15,.1);--red:#d64545;--redbg:rgba(214,69,69,.09);--blu:#2f7fd6;--blubg:rgba(47,127,214,.09);
+  --shadow:0 1px 2px rgba(10,12,20,.04),0 8px 24px rgba(10,12,20,.08);}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-columns:200px 1fr;min-height:100vh}
-.num,td.n,th.n{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
-nav{border-right:1px solid var(--line);padding:18px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:2px}
-.brand{font-weight:700;letter-spacing:.02em;padding:0 10px 14px;font-size:15px}.brand b{color:var(--acc)}
-nav a{color:var(--mute);text-decoration:none;padding:8px 10px;border-radius:7px;display:flex;justify-content:space-between;align-items:center}
-nav a:hover{color:var(--text);background:var(--panel)}nav a.on{color:var(--bg);background:var(--acc);font-weight:600}
-.badge{background:var(--red);color:#fff;border-radius:9px;font-size:11px;padding:0 6px;font-weight:700}nav a.on .badge{background:var(--bg)}
-nav .foot{margin-top:auto;color:var(--mute);font-size:12px;padding:10px}
-main{padding:18px 24px 60px;min-width:0}
-header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
-h1{font-size:20px;margin:0;flex:1}h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin:26px 0 10px;font-weight:600}
-.sample{background:#3a2f0f;border:1px solid #6b5514;color:var(--amb);padding:8px 12px;border-radius:8px;margin-bottom:14px;font-size:13px}
-button,select,input,textarea{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
-button{cursor:pointer}button:hover{border-color:var(--mute)}button.pri{background:var(--acc);color:var(--bg);border-color:var(--acc);font-weight:600}
-button.sm{padding:3px 8px;font-size:12px}button:disabled{opacity:.45;cursor:default}
-textarea{width:100%;min-height:64px;resize:vertical}
-.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.kpi .v{font-size:26px;font-weight:700}.kpi .l{color:var(--mute);font-size:12px}
-.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
-.card h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center}
-.tag{font-size:11px;padding:1px 7px;border-radius:9px;border:1px solid var(--line);color:var(--mute);font-weight:500;white-space:nowrap}
-.tag.red{color:var(--red);border-color:#5a2a2a}.tag.amb{color:var(--amb);border-color:#5a4a1e}.tag.grn{color:var(--grn);border-color:#1f4a31}.tag.blu{color:var(--blu);border-color:#1f3a55}.tag.acc{color:var(--acc);border-color:#4c5a25}
-.row{display:flex;justify-content:space-between;padding:3px 0;color:var(--mute)}.row b{color:var(--text);font-weight:600}
-.red{color:var(--red)}.amb{color:var(--amb)}.grn{color:var(--grn)}.mute{color:var(--mute)}
-.spark{display:flex;align-items:flex-end;gap:2px;height:34px;margin-top:10px}.spark i{flex:1;background:var(--acc);opacity:.8;border-radius:1px;min-height:1px}.spark i.z{background:var(--line)}
-.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
-table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--mute);font-size:12px;font-weight:500;position:sticky;top:0;background:var(--panel)}tr:last-child td{border-bottom:0}td.n,th.n{text-align:right}
-td.wrap{white-space:normal;min-width:220px}
-.msg{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-.msg.sent{opacity:.5}.msg .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
-.msg .q{border-left:3px solid var(--line);padding:2px 10px;margin:6px 0 10px;color:#cfd3d8}
-.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{cursor:pointer;user-select:none}.chip.on{background:var(--acc);color:var(--bg);border-color:var(--acc)}
-#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:8px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
-#toast.on{opacity:1}
-.prog{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
-.prog .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.prog .top b{font-weight:600}
-.prog .track{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin-top:8px}
-.prog .fill{height:100%;background:var(--acc);border-radius:3px;transition:width .9s linear}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{margin:0;background:var(--bg);color:var(--text);font:13.5px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"cv11","ss01","ss03";display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+.num,td.n,th.n{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:12px}
+a{color:inherit}
+::selection{background:var(--accbg)}
+
+/* sidebar */
+nav{background:var(--side);border-right:1px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:1px;overflow-y:auto}
+.brand{display:flex;align-items:center;gap:9px;padding:4px 10px 16px;font-weight:600;font-size:14px;letter-spacing:-.01em}
+.logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--acc),#c084fc);display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(139,147,255,.35)}
+.navsec{font-size:11px;font-weight:500;color:var(--t3);padding:14px 10px 5px;letter-spacing:.02em}
+nav a{color:var(--t2);text-decoration:none;padding:6px 10px;border-radius:7px;display:flex;align-items:center;gap:9px;font-weight:500;transition:background .12s,color .12s}
+nav a svg{width:15px;height:15px;opacity:.75;flex:none}
+nav a:hover{color:var(--text);background:var(--s2)}
+nav a.on{color:var(--text);background:var(--s3)}nav a.on svg{opacity:1}
+nav a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--t2);background:var(--s3);border-radius:20px;padding:0 7px;line-height:18px;font-variant-numeric:tabular-nums}
+nav a .cnt.hot{color:#fff;background:var(--red)}
+.foot{margin-top:auto;padding:12px 10px 4px;font-size:12px;color:var(--t3);display:flex;flex-direction:column;gap:4px}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.dot.on{background:var(--grn);box-shadow:0 0 0 3px var(--grnbg)}.dot.off{background:var(--amb);box-shadow:0 0 0 3px var(--ambbg)}
+
+/* main */
+main{min-width:0;padding:0 0 80px}
+.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid var(--line);padding:14px 32px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+h1{font-size:17px;font-weight:600;letter-spacing:-.015em;margin:0}
+.scanline{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex:1;min-width:0}
+.pillinfo{font-size:12px;color:var(--t2);background:var(--s1);border:1px solid var(--line);border-radius:20px;padding:2px 10px;white-space:nowrap}
+.pillinfo b{color:var(--text);font-weight:500}
+.wrap{padding:22px 32px;max-width:1380px}
+h2{font-size:13px;font-weight:600;margin:30px 0 10px;letter-spacing:-.005em;display:flex;align-items:center;gap:8px}
+h2 .sub{font-weight:400;color:var(--t3)}
+.lede{color:var(--t2);margin:0 0 16px;max-width:760px}
+.sample{background:var(--ambbg);color:var(--amb);padding:9px 14px;border-radius:var(--r);margin-bottom:16px;font-size:13px}
+
+/* controls */
+button,select,input,textarea{font:inherit;color:var(--text)}
+button{cursor:pointer;background:var(--s2);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;font-weight:500;transition:background .12s,border-color .12s,transform .05s;white-space:nowrap}
+button:hover{background:var(--s3)}button:active{transform:translateY(.5px)}
+button.pri{background:var(--acc2);border-color:transparent;color:#fff;box-shadow:0 1px 0 rgba(255,255,255,.15) inset,0 2px 8px rgba(111,120,245,.3)}button.pri:hover{background:var(--acc)}
+button.ghost{background:transparent;border-color:transparent;color:var(--t2)}button.ghost:hover{background:var(--s2);color:var(--text)}
+button.sm{padding:3px 9px;font-size:12px;border-radius:7px}
+button:disabled{opacity:.4;cursor:default}
+select,input[type=text],input[type=number],input:not([type]),textarea{background:var(--s1);border:1px solid var(--line2);border-radius:8px;padding:6px 10px;outline:none;transition:border-color .12s,box-shadow .12s}
+select:focus,input:focus,textarea:focus{border-color:var(--acc);box-shadow:0 0 0 3px var(--accbg)}
+textarea{width:100%;min-height:72px;resize:vertical;line-height:1.5}
+input[type=checkbox]{accent-color:var(--acc2);width:15px;height:15px;vertical-align:-3px;cursor:pointer}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.sp{flex:1}
+.hint{color:var(--t3);font-size:12px}
+
+/* tabs + chips */
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 20px;overflow-x:auto;scrollbar-width:none}
+.tabs a{padding:9px 12px 10px;color:var(--t2);text-decoration:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:7px;transition:color .12s}
+.tabs a:hover{color:var(--text)}.tabs a.on{color:var(--text);border-color:var(--acc)}
+.tabs .cnt{font-size:11px;color:var(--t2);background:var(--s3);border-radius:20px;padding:0 6px;line-height:17px}.tabs .cnt.hot{background:var(--redbg);color:var(--red)}
+.seg{display:inline-flex;background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:2px;gap:2px;flex-wrap:wrap}
+.seg span{padding:4px 10px;border-radius:7px;color:var(--t2);cursor:pointer;font-weight:500;font-size:12.5px;user-select:none;white-space:nowrap}
+.seg span:hover{color:var(--text)}.seg span.on{background:var(--s3);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.seg span i{font-style:normal;color:var(--t3);margin-left:5px;font-variant-numeric:tabular-nums}
+
+/* surfaces */
+.card{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}
+.kpis{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:6px}
+.kpi{background:var(--s1);padding:14px 16px;flex:1 1 150px}
+.kpi .v{font-size:24px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2}
+.kpi .l{color:var(--t2);font-size:12px;margin-top:2px}
+.kpi .v.red{color:var(--red)}.kpi .v.amb{color:var(--amb)}.kpi .v.grn{color:var(--grn)}.kpi .v.blu{color:var(--blu)}
+.row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;color:var(--t2);border-bottom:1px solid var(--line)}.row:last-of-type{border-bottom:0}.row b{color:var(--text);font-weight:500}
+.card h3{margin:0 0 10px;font-size:14px;font-weight:600;display:flex;gap:8px;align-items:center;letter-spacing:-.01em}
+.red{color:var(--red)}.amb{color:var(--amb)}.grn{color:var(--grn)}.blu{color:var(--blu)}.mute{color:var(--t2)}.faint{color:var(--t3)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;padding:1px 8px;border-radius:20px;background:var(--s3);color:var(--t2);font-weight:500;white-space:nowrap;line-height:19px}
+.tag.red{background:var(--redbg);color:var(--red)}.tag.amb{background:var(--ambbg);color:var(--amb)}.tag.grn{background:var(--grnbg);color:var(--grn)}.tag.blu{background:var(--blubg);color:var(--blu)}.tag.acc{background:var(--accbg);color:var(--acc)}
+.spark{display:flex;align-items:flex-end;gap:3px;height:36px;margin-top:12px}.spark i{flex:1;background:var(--acc);opacity:.85;border-radius:2px 2px 0 0;min-height:2px}.spark i.z{background:var(--s3)}
+
+/* tables */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--s1)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--t3);font-size:11.5px;font-weight:500;position:sticky;top:0;background:var(--s1)}
+tbody tr{transition:background .1s}tbody tr:hover{background:var(--s2)}tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right}td.c,th.c{text-align:center}
+td.wrapc{white-space:normal;min-width:240px;color:var(--t2)}
+th.sortable{cursor:pointer}th.sortable:hover{color:var(--text)}
+
+/* checks */
+.ck{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:11px;font-weight:700}
+.ck.ok{background:var(--grnbg);color:var(--grn)}.ck.bad{background:var(--redbg);color:var(--red)}.ck.warn{background:var(--ambbg);color:var(--amb)}.ck.na{background:var(--s3);color:var(--t3)}
+.checklist{display:flex;flex-direction:column}
+.ci{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;padding:11px 0;border-bottom:1px solid var(--line)}.ci:last-child{border-bottom:0}
+.ci .lbl{font-weight:500}.ci .det{color:var(--t2);font-size:12.5px;margin-top:1px}
+.ci ul{margin:6px 0 0;padding-left:16px;color:var(--t2);font-size:12.5px;columns:2;column-gap:28px}.ci li{margin:1px 0;break-inside:avoid}
+
+/* message list */
+.list{background:var(--s1);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.item{padding:14px 18px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:32px 1fr;gap:12px;transition:background .1s}
+.item:last-child{border-bottom:0}.item:hover{background:var(--s2)}
+.item.done{opacity:.45}
+.av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;color:#fff}
+.ihead{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ihead b{font-weight:600}
+.meta{color:var(--t3);font-size:12px}
+.quote{margin:7px 0 2px;color:var(--text);white-space:pre-wrap;word-break:break-word}
+.ctx{color:var(--t3);font-size:12px;margin-top:6px}
+.actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.preview{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--text);white-space:pre-wrap}
+a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-space:nowrap}a.lk:hover{text-decoration:underline}
+.empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
+
+/* rescan menu */
+.menuwrap{position:relative}
+.menu{position:absolute;right:0;top:calc(100% + 8px);width:420px;max-width:calc(100vw - 32px);background:var(--s1);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);padding:6px;z-index:20;display:none}
+.menu.on{display:block;animation:pop .14s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.mi{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:9px;cursor:pointer}
+.mi:hover{background:var(--s2)}.mi .ttl{font-weight:600}.mi .d{color:var(--t2);font-size:12px}
+.mi .ic{width:30px;height:30px;border-radius:8px;background:var(--accbg);color:var(--acc);display:grid;place-items:center;flex:none;font-size:14px}
+.msec{border-top:1px solid var(--line);margin:6px 0 0;padding:10px 12px 6px}
+.msec .h{font-size:11.5px;color:var(--t3);font-weight:500;margin-bottom:6px;display:flex}
+.cbgrid{display:grid;grid-template-columns:1fr 90px 90px;gap:2px 8px;align-items:center}
+.cbgrid label{display:flex;align-items:center;gap:7px;padding:4px 0;cursor:pointer}
+.cbgrid .hd{font-size:11.5px;color:var(--t3);text-align:center}
+.cbgrid .cc{text-align:center}
+.hist{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto}
+.hist div{display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12.5px}
+.hist .w{color:var(--t3);margin-left:auto;white-space:nowrap}
+
+/* progress */
+.prog{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:18px 32px 0}
+.prog .top2{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.prog .top2 b{font-weight:600}
+.prog .track{height:4px;background:var(--s3);border-radius:4px;overflow:hidden;margin-top:10px}
+.prog .fill{height:100%;background:linear-gradient(90deg,var(--acc2),var(--acc));border-radius:4px;transition:width .9s linear}
 .prog.done .fill{background:var(--grn)}.prog.late .fill{background:var(--amb)}
-.steps{display:flex;gap:14px;margin-top:6px;font-size:12px;color:var(--mute);flex-wrap:wrap}.steps .ok{color:var(--grn)}.steps .now{color:var(--text);font-weight:600}
-a.dl{color:var(--blu);text-decoration:none;font-size:12px;white-space:nowrap}a.dl:hover{text-decoration:underline}
-@media(max-width:760px){body{grid-template-columns:1fr}nav{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}.brand,nav .foot{display:none}nav a{white-space:nowrap;gap:6px}main{padding:14px}}
+.steps{display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--t3);flex-wrap:wrap}.steps .ok{color:var(--grn)}.steps .now{color:var(--text);font-weight:500}
+
+#toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,8px);background:var(--text);color:var(--bg);padding:9px 16px;border-radius:10px;font-weight:500;opacity:0;transition:opacity .18s,transform .18s;pointer-events:none;max-width:90vw;box-shadow:var(--shadow);z-index:50}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media(max-width:860px){
+  body{grid-template-columns:1fr}
+  nav{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px;gap:2px}
+  .brand,.foot,.navsec{display:none}nav a{white-space:nowrap}
+  .top,.wrap{padding-left:16px;padding-right:16px}.prog{margin:14px 16px 0}
+  .ci ul{columns:1}
+}
 </style>
 </head>
 <body>
 <nav id="nav"></nav>
 <main>
-  <header><h1 id="title"></h1><span class="mute" id="stamp"></span><button id="refresh">↻ Refresh now</button></header>
+  <div class="top">
+    <h1 id="title"></h1>
+    <div class="scanline" id="stamp"></div>
+    <div class="menuwrap"><button class="pri" id="scanbtn">↻ Rescan <span style="opacity:.7">▾</span></button><div class="menu" id="menu"></div></div>
+  </div>
   <div id="progress"></div>
-  <div id="banner"></div>
-  <div id="view"></div>
+  <div class="wrap"><div id="banner"></div><div id="view"></div></div>
 </main>
 <div id="toast"></div>
 <script>
-const VIEWS=[['today','Today'],['capcut','CapCut inbox'],['artlist','Artlist inbox'],['creatify','Creatify inbox'],['melius','Melius inbox'],['coaches','Coaches'],['creators','Creators & flags'],['slack','Slack & DMs'],['audits','Audits']];
+/* ---------- constants ---------- */
+const CAMPS=['capcut','artlist','creatify','melius'];
+const NAMES={capcut:'CapCut',artlist:'Artlist',creatify:'Creatify',melius:'Melius'};
+const ICON={
+  today:'<path d="M3 9h18M7 3v4M17 3v4M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>',
+  camp:'<path d="M4 4h16v16H4z" opacity=".0"/><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  people:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+  chat:'<path d="M4 5h16v11H8l-4 4z"/>',
+  doc:'<path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6"/>'};
+const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
+const VIEWS=[['today','Today','today'],['capcut','CapCut','camp'],['artlist','Artlist','camp'],['creatify','Creatify','camp'],['melius','Melius','camp'],['creators','Creators & flags','people'],['slack','Slack & DMs','chat'],['audits','Weekly audits','doc']];
+// CapCut Discord channels used in the welcome message (<#id> renders as a channel link in Discord).
+const CH={startHere:'1569757043642867835',tyAnn:'1570964214728630322'};
+const CHNAME={[CH.startHere]:'🏁-start-here',[CH.tyAnn]:'team-ty-announcements'};
 const TEMPLATES={
+  welcome:{label:'Welcome',text:`Hey {first}, excited to have you! Check out <#${CH.startHere}> first, then head to <#${CH.tyAnn}> for onboarding. Lmk once your accounts are made`},
   checkin:{label:'Daily check-in',text:'Hey {first}, how many posts you getting out today?'},
   missed:{label:'Missed yesterday',text:"Hey {first}, I didn't see a post from you yesterday. Everything good? What's the plan to get back on track today?"},
   scale:{label:'Offer 5/day',text:'Hey {first}, your CPM is sitting under the campaign target, nice work. Want to bump from 3 posts a day to 5?'},
   custom:{label:'Custom…',text:''}
 };
-const runnerAge=()=>S.runner&&S.runner.lastPollAt?(Date.now()-new Date(S.runner.lastPollAt))/60000:null;
-const fireMsg=()=>!live?'Rescan queued (preview)':runnerAge()!=null&&runnerAge()<2?'Queued. The Mac Mini picks it up within 30 seconds.':'Queued, but the Mac Mini has not checked in recently, so it will run once it is back online.';
-let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set();
+const GUILD={capcut:'1569756845319520387',artlist:'1570552478817067038',creatify:'1562201369811877949',melius:'1559661121588306052'};
+const H=36e5, DAY=864e5;
+const WIN=[['a','start',12],['b','mid',17],['c','end',22]]; // ET check-in windows and the hour each one closes
+
+/* ---------- state ---------- */
+let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, localQueue=[], sentIds=new Set(), copied=new Set();
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
+const WHO={capcut:'Ty McGuire'}; // coach filter per campaign page
+let SORT='wait';
 try{Object.assign(T,JSON.parse(localStorage.getItem('gk_thresholds')||'{}'))}catch(e){}
 
+/* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const wait=m=>m<60?m+'m':m<1440?Math.floor(m/60)+'h '+(m%60)+'m':Math.floor(m/1440)+'d '+Math.floor(m%1440/60)+'h';
-const waitCls=m=>m>=300?'red':m>=120?'amb':'';
-const money=n=>n==null?'—':'$'+Number(n).toFixed(2);
+const wait=m=>m<60?Math.round(m)+'m':m<1440?Math.floor(m/60)+'h '+Math.round(m%60)+'m':Math.floor(m/1440)+'d '+Math.floor(m%1440/60)+'h';
+const waitCls=m=>m>=900?'red':m>=300?'amb':'';
+const money=n=>n==null||isNaN(n)?'—':'$'+Number(n).toFixed(2);
 const fmtN=n=>n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':String(n);
 const ago=iso=>{if(!iso)return'never';const m=Math.max(0,Math.round((Date.now()-new Date(iso))/60000));return m<1?'just now':wait(m)+' ago'};
 const camp=id=>S.campaigns.find(c=>c.id===id);
-const GUILD={capcut:'1569756845319520387',artlist:'1570552478817067038',creatify:'1562201369811877949',melius:'1559661121588306052'};
-// Link to the exact message when the scan recorded its id, otherwise to the channel.
+const snow=id=>/^\d{15,22}$/.test(String(id||''))?Number(BigInt(id)>>22n)+1420070400000:null; // Discord id -> creation time
+const isTy=n=>/^Ty\b/.test(n||'');
+const first=n=>String(n||'').split(' ')[0];
+const plural=(n,w)=>n+' '+(n===1?w:/[^aeiou]y$/.test(w)?w.slice(0,-1)+'ies':w+'s');
+const AVC=['#7c83ff','#c084fc','#f472b6','#fb923c','#34d399','#38bdf8','#facc15','#a3e635'];
+const av=n=>{let h=0;for(const ch of String(n||'?'))h=(h*31+ch.charCodeAt(0))>>>0;return `<div class="av" style="background:${AVC[h%AVC.length]}">${esc((String(n||'?').match(/\p{L}|\d/u)||['?'])[0].toUpperCase())}</div>`};
 const msgUrl=(c,u)=>{const g=(c&&(c.guildId||GUILD[c.id]));if(!g||!/^\d+$/.test(String(u.channelId||'')))return null;return 'https://discord.com/channels/'+g+'/'+u.channelId+(/^\d+$/.test(String(u.messageId||''))?'/'+u.messageId:'')};
+const chanUrl=(c,id)=>msgUrl(c,{channelId:id});
 const dmUrl=m=>/^\d+$/.test(String(m.id||''))?'https://discord.com/channels/@me/'+m.id+(/^\d+$/.test(String(m.messageId||''))?'/'+m.messageId:''):null;
-const openLink=(url,exact)=>url?`<a class="dl" href="${esc(url)}" target="_blank" rel="noopener">${exact?'Open message in Discord ↗':'Open channel in Discord ↗'}</a>`:'';
-const waitingOn=c=>c?(c.id==='capcut'?pendingUn(c):c.unanswered):[];
+const openLink=(url,exact)=>url?`<a class="lk" href="${esc(url)}" target="_blank" rel="noopener">${exact?'Open message ↗':'Open channel ↗'}</a>`:'';
+const mentions=t=>esc(t).replace(/&lt;#(\d+)&gt;/g,(m,id)=>`<span class="tag blu">#${esc(CHNAME[id]||id)}</span>`);
+const fill=(t,name)=>t.replaceAll('{first}',first(name));
+const chInfo=(c,x)=>x&&x.channelId&&c.discord&&c.discord.channels?c.discord.channels[x.channelId]||null:null;
+const runnerAge=()=>S.runner&&S.runner.lastPollAt?(Date.now()-new Date(S.runner.lastPollAt))/60000:null;
+const fireMsg=()=>!live?'Rescan queued (preview)':runnerAge()!=null&&runnerAge()<2?'Queued · the Mac Mini picks it up within 30 seconds':'Queued · the Mac Mini will run it once it checks in again';
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2600)}
+const etParts=t=>Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));
+const etDay=t=>{const p=etParts(t);return `${p.year}-${p.month}-${p.day}`};
+async function copy(text){try{await navigator.clipboard.writeText(text);return true}catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();const ok=document.execCommand('copy');ta.remove();return ok}}
+
+/* ---------- creator status: posting / warming up / waiting on first post / not started / idle ---------- */
+function cstat(c,x){
+  const ch=chInfo(c,x), now=Date.now(), days=x.daysOnCampaign||null, last=x.lastPostAt?+new Date(x.lastPostAt):null;
+  const warmAt=ch&&ch.warmAt?+new Date(ch.warmAt):null, warmRecent=warmAt&&now-warmAt<7*DAY&&(!last||warmAt>last);
+  if(x.postsToday>0||x.postsYesterday>0||(last&&now-last<48*H))return {k:'posting'};
+  if(warmRecent)return {k:'warming',why:`said “${ch.warmText}” ${ago(ch.warmAt)}`};
+  if(x.everPosted===false&&days!=null&&days<=2)return {k:'warming',why:`joined ${plural(days,'day')} ago · warm-up is about 2 days`};
+  if(x.everPosted===false&&days!=null&&days<=5)return {k:'firstpost',why:`day ${days} · first post due by day 5`};
+  if(x.everPosted===false)return {k:'notstarted',why:`day ${days||'?'} · past the 5-day deadline`};
+  const idle=last?Math.floor((now-last)/DAY):null;
+  return {k:'idle',days:idle,why:idle!=null?`no post for ${plural(idle,'day')}`:'no recent posts'};
+}
+const STAT={posting:['Posting','grn'],warming:['Warming up','blu'],firstpost:['Waiting on first post','blu'],notstarted:['No first post','red'],idle:['Not posting','amb']};
+const joinedAt=x=>snow(x.channelId)||(x.daysOnCampaign?Date.now()-x.daysOnCampaign*DAY:null);
 
 function flags(c,x){
-  const f=[];
+  const f=[], s=cstat(c,x), active=s.k==='posting'||s.k==='idle';
   if(!x.inDiscord)f.push({k:'nodiscord',t:'Not in Discord',c:'blu'});
-  const posted=x.everPosted!==false;
-  if(!posted)f.push({k:'noposts',t:'No posts yet · day '+(x.daysOnCampaign||'?'),c:x.daysOnCampaign>5?'red':'blu'});
-  if(posted&&x.postsYesterday===0)f.push({k:'missed',t:'Missed yesterday · message',c:'red'});
-  if(posted&&x.postsToday===0)f.push({k:'today',t:'No post today',c:'amb'});
+  if(s.k==='warming')f.push({k:'warming',t:'Warming up'+(x.daysOnCampaign>7?' · day '+x.daysOnCampaign:''),c:x.daysOnCampaign>7?'red':'blu'});
+  if(s.k==='firstpost')f.push({k:'noposts',t:'First post due · day '+x.daysOnCampaign,c:'blu'});
+  if(s.k==='notstarted')f.push({k:'noposts',t:'No first post · day '+(x.daysOnCampaign||'?'),c:'red'});
+  if(active&&x.postsYesterday===0)f.push({k:'missed',t:'Missed yesterday',c:'red'});
+  if(active&&x.postsToday===0)f.push({k:'today',t:'No post today',c:'amb'});
+  if(s.k==='idle'&&s.days>=3)f.push({k:'idle3',t:s.days+' days no post · escalate',c:'red'});
   const redA=(x.accounts||[]).filter(a=>a.health==='red');
   if(redA.length)f.push({k:'health',t:'Account health red: '+redA.map(a=>a.platform).join(', '),c:'amb'});
   const low=(x.accounts||[]).filter(a=>a.avgViews!=null&&a.avgViews<T.lowViews);
-  if(low.length)f.push({k:'lowviews',t:'Low-view account: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
+  if(low.length)f.push({k:'lowviews',t:'Low views: '+low.map(a=>a.platform+' '+a.avgViews).join(', '),c:'amb'});
   const cut=[];
-  if(!posted&&x.daysOnCampaign>5)cut.push('no first post in '+x.daysOnCampaign+' days');
+  if(s.k==='notstarted')cut.push('no first post in '+x.daysOnCampaign+' days');
   if(x.cpm!=null&&x.posts7d>=5&&x.cpm>c.targetCpm*T.cutCpmMult)cut.push('CPM '+money(x.cpm));
   if(x.responseRate!=null&&x.responseRate<T.minResp)cut.push('replies '+x.responseRate+'%');
   const exp=x.expectedPerDay*Math.min(7,x.daysOnCampaign||7);
-  if(posted&&x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
+  if(active&&x.posts7d<exp*T.minVolPct/100)cut.push('volume '+x.posts7d+'/'+exp);
   if(cut.length)f.push({k:'cut',t:'Cut? '+cut.join(', '),c:'red'});
-  if(x.cpm!=null&&x.cpm<c.targetCpm&&x.postsYesterday>=x.expectedPerDay)f.push({k:'scale',t:'Under target CPM · offer 5/day',c:'grn'});
+  if(x.cpm!=null&&x.cpm<c.targetCpm&&x.postsYesterday>=x.expectedPerDay)f.push({k:'scale',t:'Offer 5/day',c:'grn'});
   return f;
 }
 const all=()=>S.campaigns.flatMap(c=>c.creators.map(x=>({c,x,f:flags(c,x)})));
 const has=(r,k)=>r.f.some(f=>f.k===k);
-const pendingUn=c=>{const m=c.unanswered.filter(u=>/^Ty\b/.test(u.coach||''));return (m.length||c.unanswered.some(u=>/^Ty\b/.test(u.coach||''))?m:c.unanswered).filter(u=>!sentIds.has(u.id))};
+const pendingUn=c=>{const m=c.unanswered.filter(u=>isTy(u.coach));return (m.length?m:c.unanswered).filter(u=>!sentIds.has(u.id))};
+const waitingOn=c=>c?(c.id==='capcut'?pendingUn(c):c.unanswered):[];
 
+/* ---------- coach daily audit (UGC Coach SOP + strike rules) ---------- */
+function audit(c,name){
+  const now=Date.now(), cr=c.creators.filter(x=>x.coach===name).map(x=>({x,s:cstat(c,x)}));
+  const un=c.unanswered.filter(u=>(u.coach||'Unassigned')===name).sort((a,b)=>b.waitingMin-a.waitingMin);
+  const cs=((c.discord||{}).coachStats||{})[name]||{}, chans=(c.discord||{}).channels||{}, crCh=new Set(cr.map(r=>r.x.channelId).filter(Boolean));
+  const checks=[], add=o=>checks.push({items:[],...o}), nm=r=>r.x.channel||r.x.name, scanned=c.discordScannedAt||S.sample;
+  const late=un.filter(u=>u.waitingMin>=900);
+  add({k:'reply',label:'No creator waiting over 15h for a reply',state:!scanned?'na':late.length?'bad':'ok',detail:late.length?plural(late.length,'creator')+' waiting over 15h':un.length?plural(un.length,'creator')+' waiting, all under 15h':'Nobody waiting',items:late.map(u=>`${u.channel} · ${wait(u.waitingMin)}`)});
+  const md=cs.medianResponseMin;
+  add({k:'median',label:'Median response under 5h (last 7 days)',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',detail:md==null?'No replies measured yet':`${wait(md)} across ${plural(cs.replies7d||0,'reply')}${cs.over15h7d?` · ${cs.over15h7d} took over 15h`:''}`,strike:md>300?'Strike 3 · median over 5h':null});
+  if(cs.checkins){
+    const set=new Set(cs.checkins), at=+new Date(c.discordScannedAt||now), today=etDay(at), h=+etParts(at).hour;
+    const passed=WIN.filter(w=>h>=w[2]), hit=WIN.filter(w=>set.has(today+':'+w[0])), miss=passed.filter(w=>!set.has(today+':'+w[0]));
+    let m7=0;for(let i=1;i<=7;i++){const d=etDay(at-i*DAY);WIN.forEach(w=>{if(!set.has(d+':'+w[0]))m7++})}
+    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:miss.length?'bad':m7>=7?'warn':'ok',detail:`${hit.length}/3 today${miss.length?' · missed '+miss.map(w=>w[1]).join(', '):''} · ${m7}/21 missed in the last 7 days`,strike:m7>=7?`Strike 5 · ${m7} missed check-ins in 7 days`:null});
+  }else add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:'na',detail:'Measured from the next full scan'});
+  const fresh=Object.entries(chans).filter(([id,v])=>v.coach===name&&!v.general&&snow(id)&&now-snow(id)<7*DAY);
+  const slow=fresh.map(([id,v])=>{const j=snow(id),ft=v.firstStaffAt?+new Date(v.firstStaffAt):null,any=ft||v.lastStaffMsgAt;return {v,j,ft,bad:ft?ft-j>24*H:!any&&now-j>24*H}}).filter(o=>o.bad);
+  add({k:'contact',label:'New creators contacted within 24h',state:!scanned?'na':slow.length?'bad':'ok',detail:fresh.length?`${fresh.length-slow.length}/${fresh.length} new creators contacted in time`:'No new creators this week',items:slow.map(o=>`#${o.v.name} · ${o.ft?'first reply after '+wait((o.ft-o.j)/60000):'joined '+ago(new Date(o.j))+', no coach message'}`)});
+  const missed=cr.filter(r=>(r.s.k==='posting'||r.s.k==='idle')&&r.x.postsYesterday===0);
+  add({k:'posted',label:'Active creators all posted yesterday',state:missed.length?'warn':'ok',detail:missed.length?plural(missed.length,'active creator')+' missed yesterday · ask why and set a makeup plan':'Everyone active posted',items:missed.map(nm)});
+  const idle=cr.filter(r=>r.s.k==='idle'&&r.s.days>=3);
+  add({k:'idle',label:'Nobody 3+ days without a post after warm-up',state:idle.length?'bad':'ok',detail:idle.length?plural(idle.length,'creator')+' · same-day escalation to the CM':'Nobody',items:idle.map(r=>`${nm(r)} · ${r.s.days}d`)});
+  const w7=cr.filter(r=>r.s.k==='warming'&&r.x.daysOnCampaign>7);
+  add({k:'warm',label:'Fewer than 2 creators warming up over 7 days',state:w7.length>=2?'bad':w7.length?'warn':'ok',detail:w7.length?plural(w7.length,'creator')+' warming up longer than 7 days':'Nobody',items:w7.map(r=>`${nm(r)} · day ${r.x.daysOnCampaign}`),strike:w7.length>=2?'Strike 4 · '+w7.length+' creators warming up over 7 days':null});
+  const ns=cr.filter(r=>r.s.k==='notstarted');
+  add({k:'first',label:'Nobody past the 5-day first-post deadline',state:ns.length?'bad':'ok',detail:ns.length?plural(ns.length,'creator')+' past day 5 with no first post':'Nobody',items:ns.map(r=>`${nm(r)} · day ${r.x.daysOnCampaign}`)});
+  const quiet=Object.entries(chans).filter(([id,v])=>v.coach===name&&!v.general&&crCh.has(id)&&snow(id)&&now-snow(id)>48*H&&(!v.lastStaffMsgAt||now-new Date(v.lastStaffMsgAt)>48*H));
+  add({k:'quiet',label:'Every creator heard from the coach in the last 48h',state:!scanned?'na':quiet.length?'warn':'ok',detail:quiet.length?plural(quiet.length,'creator')+' with no coach message in 48h+':'Everyone',items:quiet.map(([id,v])=>`#${v.name} · ${v.lastStaffMsgAt?ago(v.lastStaffMsgAt):'never'}`)});
+  const views=cr.reduce((s,r)=>s+(r.x.views7d||0),0), spend=cr.reduce((s,r)=>s+(r.x.cpm||0)*(r.x.views7d||0)/1000,0), g=views?spend/views*1000:null, tgt=c.targetCpm||4;
+  add({k:'cpm',label:`Coach group CPM under ${money(tgt)} (7 days)`,state:g==null?'na':g<=tgt?'ok':'warn',detail:g==null?'No views yet':money(g)+(g<tgt?' · under target, removes a strike':''),bonus:g!=null&&g<tgt});
+  const counts={};cr.forEach(r=>counts[r.s.k]=(counts[r.s.k]||0)+1);
+  return {name,cr,un,cs,checks,counts,strikes:checks.filter(k=>k.strike).map(k=>k.strike),bad:checks.filter(k=>k.state==='bad').length,warn:checks.filter(k=>k.state==='warn').length};
+}
+const LINE={
+  reply:k=>`${plural(k.items.length,'creator')} waiting over 15h for a reply: ${k.items.slice(0,8).join(', ')}`,
+  median:k=>`Median response this week is ${k.detail.split(' across')[0]}. It needs to be under 5h`,
+  checkins:k=>`Check-ins: ${k.detail}. It's 3 a day, the last one before 10 PM ET`,
+  contact:k=>`New creators not contacted within 24h: ${k.items.slice(0,8).join(', ')}`,
+  posted:k=>`Missed a post yesterday: ${k.items.slice(0,10).join(', ')}. Ask why and set a makeup plan`,
+  idle:k=>`3+ days with no post after warm-up: ${k.items.slice(0,8).join(', ')}. These need escalating today`,
+  warm:k=>`Still warming up after 7+ days: ${k.items.slice(0,8).join(', ')}`,
+  first:k=>`Past the 5-day first post deadline: ${k.items.slice(0,8).join(', ')}`,
+  quiet:k=>`No message from you in 48h+: ${k.items.slice(0,8).join(', ')}`,
+  cpm:k=>`Group CPM is ${k.detail}, over the target`};
+function coachMsg(a){
+  const lines=a.checks.filter(k=>k.state==='bad'||k.state==='warn').map(k=>'- '+LINE[k.k](k));
+  return lines.length?`Hey ${first(a.name)}, quick check on your creators today:\n${lines.join('\n')}\nCan you get these handled today and let me know?`:'';
+}
+const ck=st=>`<span class="ck ${st}" title="${st==='ok'?'On track':st==='bad'?'Needs action':st==='warn'?'Watch':'No data yet'}">${st==='ok'?'✓':st==='bad'?'✕':st==='warn'?'!':'–'}</span>`;
+
+/* ---------- data load ---------- */
 async function load(){
   try{const r=await fetch('api/state',{cache:'no-store'});if(!r.ok)throw 0;S=await r.json();live=true}
   catch(e){try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
-  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.coaches=c.coaches||[];c.creators=c.creators||[];
-    if(c.discord){const ch=c.discord.channels||{},cs=c.discord.coachStats||{},byCh={};
-      c.creators.forEach(x=>{const d=x.channelId&&ch[x.channelId];if(d){x.coach=d.coach;x.responseRate=d.responseRate;x.channel='#'+d.name;byCh[x.channelId]=x}else if(x.coach==='Unassigned'||!c.discordScannedAt){}else x.coach='Unassigned'});
-      c.unanswered.forEach(u=>{const x=byCh[u.channelId];if(x){u.creator=x.name;u.creatorId=x.id}});
-      const names=[...new Set([...Object.keys(cs),...c.creators.map(x=>x.coach)])];
-      c.coaches=names.map(n=>{const un=c.unanswered.filter(u=>u.coach===n);return {name:n,creators:c.creators.filter(x=>x.coach===n).length,medianResponseMin:cs[n]?cs[n].medianResponseMin:null,replies7d:cs[n]?cs[n].replies7d:null,unanswered:un.length,oldestUnansweredMin:un.reduce((m,u)=>Math.max(m,u.waitingMin),0),missedCheckins7d:null,strikes:null}}).sort((a,b)=>b.creators-a.creators)}});render();
+  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];
+  S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.creators=c.creators||[];
+    if(c.discord){const ch=c.discord.channels||{},byCh={};
+      c.creators.forEach(x=>{const d=x.channelId&&ch[x.channelId];if(d){x.coach=d.coach;x.responseRate=d.responseRate;x.channel='#'+d.name;byCh[x.channelId]=x}else if(c.discordScannedAt)x.coach='Unassigned'});
+      c.unanswered.forEach(u=>{const x=byCh[u.channelId];if(x){u.creator=x.name;u.creatorId=x.id}});}
+    c.coachNames=[...new Set([...Object.keys((c.discord||{}).coachStats||{}),...Object.values((c.discord||{}).channels||{}).filter(v=>!v.general).map(v=>v.coach),...c.creators.map(x=>x.coach)])].filter(n=>n&&n!=='Unassigned')
+      .sort((a,b)=>c.creators.filter(x=>x.coach===b).length-c.creators.filter(x=>x.coach===a).length);
+  });
+  render();
 }
 async function act(list){
   if(live){
@@ -140,189 +360,321 @@ async function act(list){
   return true;
 }
 const queue=()=>(live?S.queue:localQueue).slice().reverse();
-const fill=(t,name)=>t.replaceAll('{first}',name.split(' ')[0]);
 
+/* ---------- scan history ---------- */
+function describeScope(s,c){
+  s=s||'all';
+  if(s==='all')return 'Full check';
+  if(CAMPS.includes(s))return NAMES[s]+' · messages + analytics';
+  if(s==='dms')return 'Discord DMs';if(s==='slack')return 'Slack';
+  if(s.startsWith('channel:')){const [,k,id]=s.split(':'),v=((camp(k)||{}).discord||{}).channels||{};return NAMES[k]+' · '+(v[id]?'#'+v[id].name:'one channel')}
+  const p=s.slice(6).split(','), out=[];
+  CAMPS.forEach(k=>{const lp=p.includes('lp.'+k),dc=p.includes('dc.'+k);if(lp||dc)out.push(NAMES[k]+' '+(lp&&dc?'messages + analytics':dc?'messages':'analytics'))});
+  if(p.includes('dms'))out.push('DMs');if(p.includes('slack'))out.push('Slack');
+  return out.join(', ');
+}
+const scans=()=>(S.queue||[]).filter(a=>a.type==='rescan').slice().sort((a,b)=>+new Date(b.finishedAt||b.startedAt||b.createdAt)-+new Date(a.finishedAt||a.startedAt||a.createdAt));
+const oldestScan=()=>{const t=S.campaigns.flatMap(c=>[c.scannedAt,c.discordScannedAt]).filter(Boolean).map(x=>+new Date(x));return t.length?new Date(Math.min(...t)).toISOString():S.generatedAt};
+function lastScans(){
+  const done=scans().filter(a=>a.status==='done');
+  const full=done.find(a=>(a.runScope||a.scope)==='all'), part=done.find(a=>(a.runScope||a.scope)!=='all');
+  return {full,part:part&&(!full||+new Date(part.finishedAt)>+new Date(full.finishedAt))?part:null};
+}
+
+/* ---------- render ---------- */
+function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
 function render(){
-  const v=(location.hash||'#today').slice(1), cc=camp('capcut');
+  const {v,sub}=route(), cc=camp('capcut');
   const badges={capcut:cc?pendingUn(cc).length:0,artlist:waitingOn(camp('artlist')).length,creatify:waitingOn(camp('creatify')).length,melius:waitingOn(camp('melius')).length,slack:S.slack.length+(S.dms||[]).length};
-  $('#nav').innerHTML='<div class="brand"><b>Giga</b>CM Portal</div>'+VIEWS.map(([k,l])=>`<a href="#${k}" class="${k===v?'on':''}">${l}${badges[k]?`<span class="badge">${badges[k]}</span>`:''}</a>`).join('')+`<div class="foot">Scans run on the Mac Mini via Claude in Chrome${live&&S.runner&&S.runner.lastPollAt?`<br>${runnerAge()<2?'<span class="grn">● Mac Mini online</span>':'<span class="amb">● Mac Mini last seen '+ago(S.runner.lastPollAt)+'</span>'}`:''}</div>`;
+  const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${k==='capcut'||k==='slack'?'hot':''}">${badges[k]}</span>`:''}</a>`;
+  $('#nav').innerHTML=`<div class="brand"><div class="logo">G</div>GigaCM</div>`+link(VIEWS[0])+'<div class="navsec">Campaigns</div>'+VIEWS.slice(1,5).map(link).join('')+'<div class="navsec">Everything else</div>'+VIEWS.slice(5).map(link).join('')+
+    `<div class="foot">${live&&S.runner&&S.runner.lastPollAt?(runnerAge()<2?'<span><span class="dot on"></span>Mac Mini online</span>':'<span><span class="dot off"></span>Mac Mini seen '+ago(S.runner.lastPollAt)+'</span>'):''}<span>Full check every 3 hours</span></div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
-  $('#stamp').textContent='Last scan '+ago(S.generatedAt);
-  $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout. Buttons queue actions here but nothing is sent.</div>':'';
-  $('#view').innerHTML=({today:vToday,capcut:vCapcut,artlist:()=>vInbox('artlist'),creatify:()=>vInbox('creatify'),melius:()=>vInbox('melius'),coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  const ls=lastScans();
+  $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, all four Discords, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
+    (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
+  $('#banner').innerHTML=S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
+  $('#view').innerHTML=({today:vToday,capcut:()=>vCampaign('capcut',sub),artlist:()=>vCampaign('artlist',sub),creatify:()=>vCampaign('creatify',sub),melius:()=>vCampaign('melius',sub),creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
+  if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
 }
+const kpi=(v,l,cls='')=>`<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
 
 function vToday(){
   const rows=all(), cc=camp('capcut'), mine=rows.filter(r=>r.c.id==='capcut');
-  const k=(v,l,cls='')=>`<div class="kpi"><div class="v num ${cls}">${v}</div><div class="l">${l}</div></div>`;
-  let h='<div class="grid">'+
-    k(cc?pendingUn(cc).length:0,'CapCut creators waiting on a reply','red')+
-    k(S.slack.length+(S.dms||[]).length,'Slack messages and Discord DMs to answer','amb')+
-    k(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
-    k(rows.filter(r=>!r.x.inDiscord).length,'In LaunchPoint but not in Discord','blu')+
-    k(S.campaigns.reduce((s,c)=>s+(c.role==='cm'?0:c.unanswered.length),0),'Unanswered on oversight campaigns')+
-    k(rows.filter(r=>has(r,'cut')).length,'Cut candidates (all campaigns)')+
-    k(rows.filter(r=>has(r,'lowviews')).length,'Creators with an account under '+T.lowViews+' avg views','amb')+
-    k(rows.filter(r=>has(r,'scale')).length,'Ready for 5/day','grn')+'</div><h2>Cohort performance today</h2><div class="cards">';
+  const st=k=>rows.filter(r=>cstat(r.c,r.x).k===k).length;
+  let h='<div class="kpis">'+
+    kpi(cc?pendingUn(cc).length:0,'CapCut creators waiting on you',cc&&pendingUn(cc).length?'red':'')+
+    kpi(S.slack.length+(S.dms||[]).length,'Slack + Discord DMs to answer',S.slack.length+(S.dms||[]).length?'amb':'')+
+    kpi(cc?newJoiners(cc).filter(r=>r.needs).length:0,'New creators to welcome','blu')+
+    kpi(mine.filter(r=>has(r,'missed')).length,'CapCut missed yesterday')+
+    kpi(st('warming'),'Warming up (all campaigns)','blu')+
+    kpi(rows.filter(r=>has(r,'cut')).length,'Cut candidates')+'</div>';
+  const coachRows=[];CAMPS.forEach(k=>{const c=camp(k);if(c)c.coachNames.forEach(n=>{const a=audit(c,n);if(a.bad||a.strikes.length)coachRows.push({c,a})})});
+  h+=`<h2>Coaches to message today <span class="sub">${coachRows.length?plural(coachRows.length,'coach'):'nobody'}</span></h2>`;
+  h+=coachRows.length?`<div class="tw"><table><thead><tr><th>Coach</th><th>Campaign</th><th>Needs action</th><th>Strike risk</th><th></th></tr></thead><tbody>${coachRows.sort((a,b)=>b.a.bad-a.a.bad).map(({c,a})=>`<tr><td><b>${esc(a.name)}</b></td><td class="mute">${esc(c.name)}</td><td>${a.checks.filter(k=>k.state==='bad').map(k=>`<span class="tag red">${esc(k.label.replace(/ \(.*\)/,''))}</span>`).join(' ')}</td><td>${a.strikes.map(s=>`<span class="tag amb">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Open →</a></td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Every coach is on track.</div>';
+  h+='<h2>Campaigns</h2><div class="cards">';
   for(const c of S.campaigns){
-    const posted=c.creators.filter(x=>x.postsToday>0).length, posts=c.creators.reduce((s,x)=>s+x.postsToday,0), exp=c.creators.length*c.expectedPerDay;
-    const missed=c.creators.filter(x=>x.everPosted!==false&&x.postsYesterday===0).length, never=c.creators.filter(x=>x.everPosted===false).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
-    const bars=c.postsByDay?c.postsByDay.map(d=>d.posts):(c.postsByHourToday||[]), mx=Math.max(1,...bars.map(n=>n||0));
-    h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Oversight'}</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻</button></h3>
-    <div class="row"><span>CPM (7d) vs target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
-    <div class="row"><span>CPM all-time</span><b class="num ${c.cpmAllTime==null?'':c.cpmAllTime>c.targetCpm?'red':'grn'}">${money(c.cpmAllTime)}${c.viewsAllTime!=null?` <span class="mute" style="font-weight:400">· ${fmtN(c.viewsAllTime)} views</span>`:''}</b></div>
-    <div class="row"><span>Creators posted today</span><b class="num">${posted} / ${c.creators.length}</b></div>
-    <div class="row"><span>Posts today vs expected</span><b class="num">${posts} / ${exp}</b></div>
-    <div class="row"><span>Missed yesterday</span><b class="num ${missed?'red':''}">${missed}</b></div>
-    <div class="row"><span>Active but never posted</span><b class="num">${never}</b></div>
-    <div class="row"><span>Unanswered creators</span><b class="num ${c.unanswered.length?'amb':''}">${c.discordScannedAt||S.sample?c.unanswered.length+(old?` · oldest ${wait(old)}`:''):'not scanned'}</b></div>
-    <div class="row"><span>Not in Discord</span><b class="num">${c.creators.filter(x=>!x.inDiscord).length}</b></div>
-    <div class="spark" title="${c.postsByDay?c.postsByDay.map(d=>d.date.slice(5)+': '+d.posts).join(' · '):'Posts per hour today'}">${bars.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):3}%"></i>`).join('')}</div>
-    <div class="mute" style="font-size:11px;margin-top:4px">${c.postsByDay?'Posts per day, last 7 days':'Posts by hour'} · LaunchPoint scanned ${ago(c.scannedAt)}${c.discordScannedAt?' · Discord '+ago(c.discordScannedAt):c.sample===undefined&&!S.sample?' · Discord not scanned yet':''}</div></div>`;
+    const sts=c.creators.map(x=>cstat(c,x).k), cnt=k=>sts.filter(s=>s===k).length;
+    const posted=c.creators.filter(x=>x.postsToday>0).length, posts=c.creators.reduce((s,x)=>s+x.postsToday,0), exp=c.creators.filter(x=>['posting','idle'].includes(cstat(c,x).k)).length*c.expectedPerDay;
+    const missed=c.creators.filter(x=>['posting','idle'].includes(cstat(c,x).k)&&x.postsYesterday===0).length, old=c.unanswered.reduce((m,u)=>Math.max(m,u.waitingMin),0);
+    const bars=c.postsByDay?c.postsByDay.map(d=>d.posts):[], mx=Math.max(1,...bars.map(n=>n||0));
+    h+=`<div class="card"><h3>${esc(c.name)} <span class="tag ${c.role==='cm'?'acc':''}">${c.role==='cm'?'You CM':'Auditing'}</span><span class="sp"></span><a class="lk" href="#${c.id}">Open →</a></h3>
+    <div class="row"><span>CPM 7d / target</span><b class="num ${c.cpm>c.targetCpm?'red':'grn'}">${money(c.cpm)} / ${money(c.targetCpm)}</b></div>
+    <div class="row"><span>Posted today</span><b class="num">${posted} creators · ${posts}/${exp} posts</b></div>
+    <div class="row"><span>Missed yesterday <span class="faint">(active only)</span></span><b class="num ${missed?'red':''}">${missed}</b></div>
+    <div class="row"><span>Warming up · first post due</span><b class="num blu">${cnt('warming')} · ${cnt('firstpost')}</b></div>
+    <div class="row"><span>No first post past day 5</span><b class="num ${cnt('notstarted')?'red':''}">${cnt('notstarted')}</b></div>
+    <div class="row"><span>Waiting on a reply</span><b class="num ${c.unanswered.length?'amb':''}">${c.discordScannedAt||S.sample?c.unanswered.length+(old?` · oldest ${wait(old)}`:''):'not scanned'}</b></div>
+    ${bars.length?`<div class="spark" title="${c.postsByDay.map(d=>d.date.slice(5)+': '+d.posts).join(' · ')}">${bars.map(n=>`<i class="${n?'':'z'}" style="height:${n?Math.round(n/mx*100):4}%"></i>`).join('')}</div>`:''}
+    <div class="hint" style="margin-top:6px">Posts per day, 7 days · analytics ${ago(c.scannedAt)} · messages ${c.discordScannedAt?ago(c.discordScannedAt):'not scanned'}</div></div>`;
   }
   return h+'</div>';
 }
 
-function vCapcut(){
-  const c=camp('capcut'); if(!c)return '<p class="mute">No CapCut data yet.</p>';
-  const rows=c.creators.map(x=>({c,x,f:flags(c,x)})), un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin);
-  const mine=u=>/^Ty\b/.test(u.coach||''), hasMine=un.some(mine);
-  let h='';
-  for(const [label,list] of hasMine?[['Your creators waiting on you',un.filter(mine)],["Other coaches' creators waiting",un.filter(u=>!mine(u))]]:[['Needs a response',un]]){
-  h+=`<h2>${label} (${list.filter(u=>!sentIds.has(u.id)).length})</h2>`;
-  if(!list.length)h+='<p class="mute">Everyone has been answered.</p>';
-  for(const u of list){const done=sentIds.has(u.id);
-    h+=`<div class="msg ${done?'sent':''}"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="tag">${esc(u.coach)}</span><span class="num ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span><span style="flex:1"></span>${openLink(msgUrl(c,u),!!u.messageId)}${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}">Recheck channel</button>`:""}</div>
-    ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div>
-    <textarea id="d_${esc(u.id)}" ${done?'disabled':''}>${esc(u.draft||'')}</textarea>
-    <div class="bar"><button class="pri" data-reply="${esc(u.id)}" ${done?'disabled':''}>${done?'Queued':'Send reply in Discord'}</button><span class="mute" style="font-size:12px">${u.draft?'AI draft · edit before sending':'No draft · write a reply or leave it to the coach'}</span></div></div>`}}
-  const missed=rows.filter(r=>has(r,'missed')&&r.x.inDiscord&&r.x.channel);
-  h+=`<h2>Missed yesterday — needs a message (${missed.length})</h2>`+bulk('missed',missed,'missed');
-  const scale=rows.filter(r=>has(r,'scale')&&r.x.inDiscord&&r.x.channel);
-  h+=`<h2>Under target CPM — offer 5 posts a day (${scale.length})</h2>`+bulk('scale',scale,'scale');
-  const aud={all:rows.filter(r=>r.x.inDiscord&&r.x.channel),today:rows.filter(r=>r.x.inDiscord&&r.x.channel&&r.x.postsToday===0)};
-  h+=`<h2>Mass message</h2><div class="card"><div class="bar"><label>To <select id="mm_aud"><option value="all">All CapCut creators in Discord (${aud.all.length})</option><option value="today">No post yet today (${aud.today.length})</option></select></label>
-  <label>Template <select id="mm_tpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label></div>
-  <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button class="pri" id="mm_send">Send to each creator's channel</button><span class="mute" style="font-size:12px">{first} becomes each creator's first name</span></div></div>`;
-  const q=queue();
-  h+=`<h2>Send queue (${q.length})</h2>`+(q.length?`<div class="tw"><table><tr><th>When</th><th>Action</th><th>To</th><th>Message</th><th>Status</th><th></th></tr>${q.slice(0,40).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${a.type==='rescan'?'Rescan':'Discord message'}</td><td>${esc(a.channel||a.scope||'')}</td><td class="wrap">${esc(a.text||'')}</td><td><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':'amb'}">${esc(a.status)}</span></td><td>${a.status==='pending'?`<button class="sm" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</table></div>`:'<p class="mute">Nothing queued.</p>');
+/* ---------- campaign pages ---------- */
+function vCampaign(id,sub){
+  const c=camp(id); if(!c)return `<div class="empty">No ${NAMES[id]} data yet.</div>`;
+  const cap=id==='capcut', audits=c.coachNames.map(n=>audit(c,n));
+  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO.capcut||r.x.coach===WHO.capcut)).length,false]]:[['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
+    ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],
+    ...audits.map(a=>['coach:'+a.name,first(a.name),a.bad,a.bad>0]),
+    ['posts',"Didn't post",null],['warm','Warming up',c.creators.filter(x=>cstat(c,x).k==='warming').length,false],
+    ...(cap?[['scale','Offer 5/day',null],['mass','Mass message',null],['queue','Queue',null]]:[])];
+  const cur=sub&&tabs.some(t=>t[0]===sub)?sub:(cap?'reply':'summary');
+  let h=`<div class="tabs">${tabs.map(([k,l,n,hot])=>`<a href="#${id}/${encodeURIComponent(k)}" class="${k===cur?'on':''}">${esc(l)}${n?`<span class="cnt ${hot?'hot':''}">${n}</span>`:''}</a>`).join('')}</div>`;
+  h+=`<div class="bar" style="margin-top:-8px"><span class="hint">Analytics ${ago(c.scannedAt)} · Discord messages ${c.discordScannedAt?ago(c.discordScannedAt):'not scanned yet'}</span><span class="sp"></span><button class="sm ghost" data-rescan="parts:dc.${id}">↻ Messages</button><button class="sm ghost" data-rescan="parts:lp.${id}">↻ Analytics</button></div>`;
+  if(cur==='reply')return h+vReply(c);
+  if(cur==='new')return h+vNew(c);
+  if(cur==='inbox')return h+vInbox(c);
+  if(cur==='summary')return h+vSummary(c,audits);
+  if(cur.startsWith('coach:'))return h+vCoach(c,audits.find(a=>a.name===cur.slice(6)));
+  if(cur==='posts')return h+vPosts(c);
+  if(cur==='warm')return h+vWarm(c);
+  if(cur==='scale')return h+vScale(c);
+  if(cur==='mass')return h+vMass(c);
+  if(cur==='queue')return h+vQueue();
   return h;
 }
-// Oversight campaigns: who is waiting and for how long. Read-only (no replies or templates; sending is CapCut-only).
-function vInbox(id){
-  const c=camp(id); if(!c)return '<p class="mute">No '+esc(id)+' data yet.</p>';
+function whoSeg(c,list,countFn){
+  const cur=WHO[c.id]||'all', opts=[['all','Everyone'],...c.coachNames.map(n=>[n,isTy(n)?'My creators':first(n)])];
+  return `<div class="seg">${opts.map(([k,l])=>`<span class="${cur===k?'on':''}" data-who="${esc(k)}" data-wc="${c.id}">${esc(l)}<i>${countFn(k)}</i></span>`).join('')}</div>`;
+}
+const byWho=(c,coach)=>{const w=WHO[c.id]||'all';return w==='all'||coach===w};
+
+function vReply(c){
+  const un=c.unanswered.filter(u=>!sentIds.has(u.id));
+  let h=`<div class="bar">${whoSeg(c,un,k=>un.filter(u=>k==='all'||u.coach===k).length)}<span class="sp"></span><label class="hint">Sort <select id="sortsel">${[['wait','Longest waiting'],['new','Newest first'],['name','Name']].map(([k,l])=>`<option value="${k}" ${SORT===k?'selected':''}>${l}</option>`).join('')}</select></label></div>`;
+  const list=c.unanswered.filter(u=>byWho(c,u.coach)).sort((a,b)=>SORT==='name'?String(a.creator).localeCompare(b.creator):SORT==='new'?a.waitingMin-b.waitingMin:b.waitingMin-a.waitingMin);
+  if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>';
+  const over=list.filter(u=>u.waitingMin>=900).length;
+  h+=`<p class="lede">${plural(list.length,'creator')} spoke last and ${list.length===1?'is':'are'} waiting${over?`, <span class="red">${over} over 15h</span>`:''}. Drafts are AI suggestions in your voice; edit, then copy and open the message in Discord.</p><div class="list">`;
+  for(const u of list){const done=sentIds.has(u.id)||copied.has(u.id), url=msgUrl(c,u);
+    h+=`<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div>
+    <div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}
+    <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…">${esc(u.draft||'')}</textarea>
+    <div class="actions"><button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>${openLink(url,!!u.messageId)}<span class="sp"></span>${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
+  return h+'</div>';
+}
+
+function newJoiners(c){
+  const now=Date.now();
+  return c.creators.map(x=>{const ch=chInfo(c,x), j=joinedAt(x);return {x,ch,j,needs:!!x.channelId&&!(ch&&(ch.firstStaffAt||ch.lastStaffMsgAt))}}).filter(r=>r.j&&now-r.j<=7*DAY).sort((a,b)=>b.j-a.j);
+}
+function vNew(c){
+  const rows=newJoiners(c), shown=rows.filter(r=>byWho(c,r.x.coach)), need=shown.filter(r=>r.needs), ok=shown.filter(r=>!r.needs);
+  const tpl=$('#wl_text')?$('#wl_text').value:TEMPLATES.welcome.text;
+  let h=`<div class="bar">${whoSeg(c,rows,k=>rows.filter(r=>(k==='all'||r.x.coach===k)&&r.needs).length)}</div>
+  <div class="card"><h3>Welcome message <span class="hint" style="font-weight:400">{first} becomes their first name · channel links stay clickable in Discord</span></h3>
+  <textarea id="wl_text">${esc(tpl)}</textarea><div class="preview" id="wl_prev" style="margin-top:8px">${mentions(fill(tpl,'Jordan'))}</div></div>`;
+  h+=`<h2>Needs a welcome <span class="sub">${need.length} · joined in the last 7 days, no coach message yet</span></h2>`;
+  h+=need.length?`<div class="list">${need.map(r=>`<div class="item ${copied.has('w'+r.x.id)?'done':''}">${av(r.x.name)}<div><div class="ihead"><b>${esc(r.x.name)}</b><span class="meta">${esc(r.x.channel||'')} · ${esc(r.x.coach)}</span><span class="sp"></span><span class="tag ${Date.now()-r.j>24*H?'red':'blu'}">joined ${ago(new Date(r.j))}</span></div>
+    <div class="actions"><button class="pri sm" data-welcome="${esc(r.x.id)}" data-camp="${c.id}">${copied.has('w'+r.x.id)?'Copied ✓ · copy again':'Copy welcome & open channel'}</button><span class="hint">${Date.now()-r.j>24*H?'Over 24h: SOP says contact within 24h':'Contact within 24h of joining'}</span></div></div></div>`).join('')}</div>`:'<div class="empty">Everyone new has been welcomed.</div>';
+  h+=`<h2>Already contacted <span class="sub">${ok.length}</span></h2>`;
+  if(ok.length)h+=`<div class="tw"><table><thead><tr><th>Creator</th><th>Coach</th><th>Joined</th><th>First coach message</th><th>Status</th></tr></thead><tbody>${ok.map(r=>{const f=r.ch.firstStaffAt||r.ch.lastStaffMsgAt,s=cstat(c,r.x);return `<tr><td><b>${esc(r.x.name)}</b> <span class="faint">${esc(r.x.channel||'')}</span></td><td class="mute">${esc(r.x.coach)}</td><td class="mute">${ago(new Date(r.j))}</td><td>${r.ch.firstStaffAt?`<span class="${+new Date(f)-r.j>24*H?'red':'grn'}">${wait((+new Date(f)-r.j)/60000)} after joining</span>`:`<span class="mute">last ${ago(f)}</span>`}</td><td><span class="tag ${STAT[s.k][1]}">${STAT[s.k][0]}</span></td></tr>`}).join('')}</tbody></table></div>`;
+  return h;
+}
+
+function vInbox(c){
   const un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin), old=un.reduce((m,u)=>Math.max(m,u.waitingMin),0);
-  const over5=un.filter(u=>u.waitingMin>=300).length, coaches=[...new Set(un.map(u=>u.coach||'Unassigned'))].sort((a,b)=>un.filter(u=>(u.coach||'Unassigned')===b).length-un.filter(u=>(u.coach||'Unassigned')===a).length);
-  const k=(v,l,cls='')=>`<div class="kpi"><div class="v num ${cls}">${v}</div><div class="l">${l}</div></div>`;
-  let h=`<div class="bar"><span class="mute">Oversight only: replies go through the coach. Discord scanned ${ago(c.discordScannedAt)}.</span><span style="flex:1"></span><button class="sm" data-rescan="${esc(c.id)}">↻ Recheck ${esc(c.name)}</button></div>`;
-  if(!c.discordScannedAt&&!S.sample)return h+'<p class="mute">Discord has not been scanned for this campaign yet.</p>';
-  h+='<div class="grid">'+k(un.length,'Creators waiting on a reply',un.length?'amb':'')+k(old?wait(old):'—','Longest wait',waitCls(old))+k(over5,'Waiting over 5h (strike line)',over5?'red':'')+'</div>';
-  if(!un.length)return h+'<p class="mute">Everyone has been answered.</p>';
-  for(const coach of coaches){
+  if(!c.discordScannedAt&&!S.sample)return '<div class="empty">Discord has not been scanned for this campaign yet.</div>';
+  let h='<div class="kpis">'+kpi(un.length,'Creators waiting on a reply',un.length?'amb':'')+kpi(old?wait(old):'—','Longest wait',waitCls(old))+kpi(un.filter(u=>u.waitingMin>=900).length,'Over 15h (SOP limit)',un.some(u=>u.waitingMin>=900)?'red':'')+kpi(un.filter(u=>u.waitingMin>=300).length,'Over 5h')+'</div><p class="lede" style="margin-top:12px">Auditing only: replies go through the coach.</p>';
+  if(!un.length)return h+'<div class="empty">Everyone has been answered.</div>';
+  for(const coach of [...new Set(un.map(u=>u.coach||'Unassigned'))]){
     const list=un.filter(u=>(u.coach||'Unassigned')===coach);
-    h+=`<h2>${esc(coach)} (${list.length})</h2>`;
-    for(const u of list)h+=`<div class="msg"><div class="top"><b>${esc(u.creator)}</b><span class="tag">${esc(u.channel)}</span><span class="num ${waitCls(u.waitingMin)}">no response for ${wait(u.waitingMin)}</span><span style="flex:1"></span>${openLink(msgUrl(c,u),!!u.messageId)}${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck channel</button>`:''}</div>
-    ${u.context?`<div class="mute" style="font-size:12px">Last from coach: ${esc(u.context)}</div>`:''}<div class="q">${esc(u.message)}</div></div>`;
+    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
   }
   return h;
 }
+
+const CHECKCOLS=[['reply','15h replies'],['median','Median <5h'],['checkins','Check-ins'],['contact','New 24h'],['posted','Posted'],['idle','3-day idle'],['warm','Warm-up'],['first','Day 5'],['quiet','48h contact'],['cpm','CPM']];
+function vSummary(c,audits){
+  const sts=c.creators.map(x=>cstat(c,x).k), cnt=k=>sts.filter(s=>s===k).length;
+  let h='<div class="kpis">'+kpi(c.creators.length,'Active creators')+kpi(cnt('posting'),'Posting','grn')+kpi(cnt('warming'),'Warming up','blu')+kpi(cnt('firstpost'),'First post due (day 3–5)','blu')+kpi(cnt('notstarted'),'No first post past day 5',cnt('notstarted')?'red':'')+kpi(c.unanswered.filter(u=>u.waitingMin>=900).length,'Waiting over 15h',c.unanswered.some(u=>u.waitingMin>=900)?'red':'')+'</div>';
+  h+=`<h2>Today's checks <span class="sub">UGC Coach SOP and strike rules</span></h2><div class="tw"><table><thead><tr><th>Coach</th><th class="n">Creators</th>${CHECKCOLS.map(([k,l])=>`<th class="c">${l}</th>`).join('')}<th>Strike risk</th><th></th></tr></thead><tbody>
+  ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k])=>{const x=a.checks.find(q=>q.k===k);return `<td class="c" title="${esc(x.label+': '+x.detail)}">${ck(x.state)}</td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
+  <div class="hint" style="margin-top:8px">Hover a mark for the numbers. Check-ins are counted from coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET).</div>`;
+  const flagged=audits.filter(a=>a.bad||a.warn);
+  h+=`<h2>Message these coaches today <span class="sub">${flagged.length}</span></h2>`;
+  h+=flagged.length?`<div class="cards">${flagged.map(a=>`<div class="card"><h3>${esc(a.name)}<span class="sp"></span>${a.bad?`<span class="tag red">${a.bad} to fix</span>`:''}${a.warn?`<span class="tag amb">${a.warn} to watch</span>`:''}</h3><textarea id="cm_${esc(c.id+a.name)}" style="min-height:130px">${esc(coachMsg(a))}</textarea><div class="actions"><button class="sm pri" data-copyta="cm_${esc(c.id+a.name)}">Copy message</button><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">See details →</a></div></div>`).join('')}</div>`:'<div class="empty">Nothing to raise with any coach today.</div>';
+  h+=serverIssues(c);
+  return h;
+}
+function serverIssues(c){
+  const noD=c.creators.filter(x=>!x.inDiscord), unas=c.creators.filter(x=>x.inDiscord&&x.coach==='Unassigned'), late=c.unanswered.filter(u=>u.waitingMin>=24*60);
+  const items=[];
+  if(late.length)items.push(['bad',`${plural(late.length,'creator')} waiting over 24h`,late.map(u=>`${u.channel} (${u.coach}) · ${wait(u.waitingMin)}`)]);
+  if(noD.length)items.push(['warn',`${plural(noD.length,'creator')} in LaunchPoint but not in Discord`,noD.map(x=>x.name)]);
+  if(unas.length)items.push(['warn',`${plural(unas.length,'creator')} in Discord with no channel under a coach`,unas.map(x=>x.name)]);
+  return `<h2>Server issues</h2>`+(items.length?`<div class="card checklist">${items.map(([st,l,list])=>`<div class="ci">${ck(st)}<div><div class="lbl">${esc(l)}</div><ul>${list.slice(0,30).map(i=>`<li>${esc(i)}</li>`).join('')}${list.length>30?`<li>…and ${list.length-30} more</li>`:''}</ul></div><span></span></div>`).join('')}</div>`:'<div class="empty">No server-wide issues found.</div>');
+}
+function vCoach(c,a){
+  if(!a)return '<div class="empty">Coach not found.</div>';
+  const msg=coachMsg(a);
+  let h=`<div class="kpis">${kpi(a.cr.length,'Creators')}${kpi(a.counts.posting||0,'Posting','grn')}${kpi(a.counts.warming||0,'Warming up','blu')}${kpi(a.un.length,'Waiting on a reply',a.un.length?'amb':'')}${kpi(a.cs.medianResponseMin!=null?wait(a.cs.medianResponseMin):'—','Median response, 7d',a.cs.medianResponseMin>300?'red':'')}${kpi(a.strikes.length,'Strike risks this week',a.strikes.length?'amb':'')}</div>`;
+  h+=`<h2>Checklist</h2><div class="card checklist">${a.checks.map(k=>`<div class="ci">${ck(k.state)}<div><div class="lbl">${esc(k.label)}</div><div class="det">${esc(k.detail)}${k.strike?` · <span class="amb">${esc(k.strike)}</span>`:''}</div>${k.items.length&&k.state!=='ok'?`<ul>${k.items.slice(0,24).map(i=>`<li>${esc(i)}</li>`).join('')}${k.items.length>24?`<li>…and ${k.items.length-24} more</li>`:''}</ul>`:''}</div><span></span></div>`).join('')}</div>`;
+  if(msg)h+=`<h2>Message to ${esc(first(a.name))}</h2><div class="card"><textarea id="cm_one" style="min-height:140px">${esc(msg)}</textarea><div class="actions"><button class="pri sm" data-copyta="cm_one">Copy message</button><span class="hint">Send it in their channel in the Launchpoint Coaches Discord</span></div></div>`;
+  h+=`<h2>Creators</h2>`+creatorTable(c,a.cr.map(r=>r.x),false);
+  if(a.un.length)h+=`<h2>Waiting on ${esc(first(a.name))}</h2><div class="list">${a.un.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}</div></div></div>`).join('')}</div>`;
+  return h;
+}
+const STORDER={notstarted:0,idle:1,firstpost:2,warming:3,posting:4};
+function creatorTable(c,xs,showCoach=true){
+  const rows=xs.map(x=>({x,s:cstat(c,x)})).sort((a,b)=>STORDER[a.s.k]-STORDER[b.s.k]||(b.x.daysOnCampaign||0)-(a.x.daysOnCampaign||0));
+  if(!rows.length)return '<div class="empty">Nobody here.</div>';
+  return `<div class="tw"><table><thead><tr><th>Creator</th>${showCoach?'<th>Coach</th>':''}<th>Status</th><th>Joined Discord</th><th>Last post</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d</th><th class="n">CPM 7d</th><th></th></tr></thead><tbody>${rows.map(({x,s})=>{const j=joinedAt(x);return `<tr><td><b>${esc(x.name)}</b> <span class="faint">${esc(x.channel||'')}</span></td>${showCoach?`<td class="mute">${esc(x.coach)}</td>`:''}<td><span class="tag ${STAT[s.k][1]}" title="${esc(s.why||'')}">${STAT[s.k][0]}</span>${s.why&&s.k!=='posting'?` <span class="faint">${esc(s.why)}</span>`:''}</td><td class="mute">${j?ago(new Date(j)):'—'}</td><td class="mute">${x.lastPostAt?ago(x.lastPostAt):'never'}</td><td class="n">${x.postsToday}</td><td class="n ${x.postsYesterday||s.k!=='posting'&&s.k!=='idle'?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td>${x.channelId?openLink(chanUrl(c,x.channelId)):''}</td></tr>`}).join('')}</tbody></table></div>`;
+}
+function vPosts(c){
+  const rows=c.creators.filter(x=>byWho(c,x.coach)).map(x=>({x,s:cstat(c,x)}));
+  const missed=rows.filter(r=>(r.s.k==='posting'||r.s.k==='idle')&&r.x.postsYesterday===0&&!(r.s.k==='idle'&&r.s.days>=3));
+  const idle=rows.filter(r=>r.s.k==='idle'&&r.s.days>=3), ns=rows.filter(r=>r.s.k==='notstarted');
+  const warming=rows.filter(r=>r.s.k==='warming').length, fp=rows.filter(r=>r.s.k==='firstpost').length;
+  let h=`<div class="bar">${whoSeg(c,rows,k=>c.creators.filter(x=>(k==='all'||x.coach===k)&&['posting','idle'].includes(cstat(c,x).k)&&x.postsYesterday===0).length)}</div>`;
+  h+=`<p class="lede">Only active creators count here. <b class="blu">${warming} warming up</b> and <b class="blu">${fp} waiting on a first post (day 3–5)</b> are left out; see Warming up.</p>`;
+  h+=`<h2>3+ days with no post <span class="sub">${idle.length} · same-day escalation</span></h2>`+creatorTable(c,idle.map(r=>r.x));
+  h+=`<h2>Missed yesterday <span class="sub">${missed.length} · ask why + makeup plan</span></h2>`+creatorTable(c,missed.map(r=>r.x));
+  if(c.id==='capcut'&&missed.length)h+=bulk('missed',missed.filter(r=>r.x.inDiscord&&r.x.channel),'missed');
+  h+=`<h2>No first post, past day 5 <span class="sub">${ns.length}</span></h2>`+creatorTable(c,ns.map(r=>r.x));
+  return h;
+}
+function vWarm(c){
+  const rows=c.creators.filter(x=>byWho(c,x.coach)).map(x=>({x,s:cstat(c,x)}));
+  const w=rows.filter(r=>r.s.k==='warming'), fp=rows.filter(r=>r.s.k==='firstpost'), long=w.filter(r=>r.x.daysOnCampaign>7);
+  let h=`<div class="bar">${whoSeg(c,rows,k=>c.creators.filter(x=>(k==='all'||x.coach===k)&&cstat(c,x).k==='warming').length)}</div>`;
+  h+=`<p class="lede">Warming up = said something about warming up in their channel and hasn't posted since, or joined in the last 2 days (the SOP warm-up is about 2 days). They're not counted as missed posts.${long.length?` <span class="red">${plural(long.length,'creator')} past 7 days</span> (2+ per coach is a strike).`:''}</p>`;
+  h+=`<h2>Warming up <span class="sub">${w.length}</span></h2>`+creatorTable(c,w.map(r=>r.x));
+  h+=`<h2>Waiting on first post <span class="sub">${fp.length} · day 3–5, no warm-up message</span></h2>`+creatorTable(c,fp.map(r=>r.x));
+  return h;
+}
+function vScale(c){
+  const rows=c.creators.map(x=>({c,x,f:flags(c,x)})).filter(r=>has(r,'scale')&&r.x.inDiscord&&r.x.channel);
+  return `<p class="lede">Under target CPM and hit expected posts yesterday.</p>`+bulk('scale',rows,'scale');
+}
+const QNOTE='<p class="hint">Queued messages are not sent yet: sending from the Mac Mini is not turned on. Use the copy buttons to send by hand for now.</p>';
 function bulk(id,rows,tpl){
-  if(!rows.length)return '<p class="mute">Nobody right now.</p>';
-  return `<div class="tw"><table><tr><th><input type="checkbox" data-all="${id}" checked></th><th>Creator</th><th>Coach</th><th class="n">CPM</th><th class="n">Today</th><th class="n">Yesterday</th><th class="n">7d</th></tr>${rows.map(({x})=>`<tr><td><input type="checkbox" class="pick_${id}" value="${esc(x.id)}" checked></td><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.channel)}</span></td><td>${esc(x.coach)}</td><td class="n">${money(x.cpm)}</td><td class="n">${x.postsToday}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td></tr>`).join('')}</table></div>
-  <div class="bar"><input id="bt_${id}" style="flex:1;min-width:240px" value="${esc(TEMPLATES[tpl].text)}"><button class="pri" data-bulk="${id}">Message selected</button></div>`;
+  if(!rows.length)return '<div class="empty">Nobody right now.</div>';
+  return `<div class="tw" style="margin-top:12px"><table><thead><tr><th><input type="checkbox" data-all="${id}" checked></th><th>Creator</th><th>Coach</th><th class="n">CPM</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d</th></tr></thead><tbody>${rows.map(({x})=>`<tr><td><input type="checkbox" class="pick_${id}" value="${esc(x.id)}" checked></td><td><b>${esc(x.name)}</b> <span class="faint">${esc(x.channel)}</span></td><td class="mute">${esc(x.coach)}</td><td class="n">${money(x.cpm)}</td><td class="n">${x.postsToday}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td></tr>`).join('')}</tbody></table></div>
+  <div class="bar"><input id="bt_${id}" style="flex:1;min-width:240px" value="${esc(TEMPLATES[tpl].text)}"><button data-bulk="${id}">Queue for selected</button></div>${QNOTE}`;
+}
+function vMass(c){
+  const aud={all:c.creators.filter(x=>x.inDiscord&&x.channel),today:c.creators.filter(x=>x.inDiscord&&x.channel&&x.postsToday===0&&['posting','idle'].includes(cstat(c,x).k))};
+  return `<div class="card"><div class="bar"><label>To <select id="mm_aud"><option value="all">All CapCut creators in Discord (${aud.all.length})</option><option value="today">Active, no post yet today (${aud.today.length})</option></select></label>
+  <label>Template <select id="mm_tpl">${Object.entries(TEMPLATES).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}</select></label></div>
+  <textarea id="mm_text">${esc(TEMPLATES.checkin.text)}</textarea><div class="bar"><button id="mm_send">Queue for each creator's channel</button><span class="hint">{first} becomes each creator's first name</span></div>${QNOTE}</div>`;
+}
+function vQueue(){
+  const q=queue().filter(a=>a.type!=='rescan');
+  return QNOTE+(q.length?`<div class="tw"><table><thead><tr><th>When</th><th>To</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody>${q.slice(0,60).map(a=>`<tr><td class="mute">${ago(a.createdAt)}</td><td>${esc(a.channel||'')}</td><td class="wrapc">${esc(a.text||'')}</td><td><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='cancelled'?'':'amb'}">${esc(a.status)}</span></td><td>${a.status==='pending'?`<button class="sm ghost" data-cancel="${esc(a.id)}">Cancel</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">Nothing queued.</div>');
 }
 
-function vCoaches(){
-  let h='<p class="mute">Median response = time from a creator message to the next staff reply in their channel, last 7 days. Red = over the 5h strike line.</p>';
-  for(const c of S.campaigns){
-    h+=`<h2>${esc(c.name)} ${c.role==='cm'?'· you CM':''}</h2><div class="tw"><table><tr><th>Coach</th><th class="n">Creators</th><th class="n">Median response</th><th class="n">Unanswered</th><th class="n">Oldest waiting</th><th class="n">Missed check-ins (7d)</th><th class="n">Strikes</th></tr>
-    ${c.coaches.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="n">${k.creators}</td><td class="n ${k.medianResponseMin==null?'mute':k.medianResponseMin>300?'red':k.medianResponseMin>120?'amb':'grn'}">${k.medianResponseMin==null?'—':wait(k.medianResponseMin)}</td><td class="n ${k.unanswered?'amb':''}">${k.unanswered}</td><td class="n ${waitCls(k.oldestUnansweredMin)}">${k.oldestUnansweredMin?wait(k.oldestUnansweredMin):'—'}</td><td class="n ${k.missedCheckins7d>=7?'red':''}">${k.missedCheckins7d??'—'}</td><td class="n ${k.strikes>=2?'red':k.strikes?'amb':''}">${k.strikes??'—'}</td></tr>`).join('')}</table></div>`;
-    if(c.unanswered.length)h+=`<div class="tw" style="margin-top:8px"><table><tr><th>Creator left unanswered</th><th>Channel</th><th>Coach</th><th class="n">Waiting</th><th>Last message</th><th></th><th></th></tr>${c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(u=>`<tr><td><b>${esc(u.creator)}</b></td><td class="mute">${esc(u.channel)}</td><td>${esc(u.coach)}</td><td class="n ${waitCls(u.waitingMin)}">${wait(u.waitingMin)}</td><td class="wrap">${esc(u.message)}</td><td>${openLink(msgUrl(c,u),!!u.messageId)}</td><td>${u.channelId?`<button class="sm" data-recheck="${esc(u.channelId)}" data-camp="${esc(c.id)}">Recheck</button>`:''}</td></tr>`).join('')}</table></div>`;
-  }
-  return h;
-}
-
+/* ---------- other pages ---------- */
 function vCreators(){
-  const FL=[['all','All'],['missed','Missed yesterday'],['today','No post today'],['noposts','No posts yet'],['health','Red account health'],['nodiscord','Not in Discord'],['lowviews','Low-view accounts'],['cut','Cut candidates'],['scale','Offer 5/day']];
+  const FL=[['all','All'],['missed','Missed yesterday'],['idle3','3+ days idle'],['today','No post today'],['warming','Warming up'],['noposts','No first post'],['health','Red health'],['nodiscord','Not in Discord'],['lowviews','Low views'],['cut','Cut candidates'],['scale','Offer 5/day']];
   let rows=all().filter(r=>F.camp==='all'||r.c.id===F.camp);
   const count=k=>k==='all'?rows.length:rows.filter(r=>has(r,k)).length;
   const shown=rows.filter(r=>F.flag==='all'||has(r,F.flag)).sort((a,b)=>b.f.length-a.f.length||(b.x.cpm||0)-(a.x.cpm||0));
-  return `<div class="bar"><div class="chips">${[['all','All campaigns'],...S.campaigns.map(c=>[c.id,c.name])].map(([k,l])=>`<span class="tag chip ${F.camp===k?'on':''}" data-fc="${esc(k)}">${esc(l)}</span>`).join('')}</div></div>
-  <div class="bar"><div class="chips">${FL.map(([k,l])=>`<span class="tag chip ${F.flag===k?'on':''}" data-ff="${k}">${l} · ${count(k)}</span>`).join('')}</div></div>
-  <div class="tw"><table><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM 7d</th><th class="n">CPM all-time</th><th class="n">Target</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d posts</th><th class="n">Replies</th><th>Accounts</th><th>Flags</th></tr>
-  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="mute">${esc(x.handle)}</span></td><td>${esc(c.name)}</td><td>${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n ${x.cpmAllTime==null?'':x.cpmAllTime>c.targetCpm?'red':'grn'}">${money(x.cpmAllTime)}</td><td class="n mute">${money(c.targetCpm)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n ${x.postsYesterday?'':'red'}">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate==null?"—":x.responseRate+"%"}</td><td>${(x.accounts||[]).map(a=>`<span class="tag num ${a.avgViews!=null?(a.avgViews<T.lowViews?'red':''):({red:'red',amber:'amb',green:'grn'}[a.health]||'')}" title="${esc(a.handle)}${a.health?' · health '+a.health:''}">${esc(a.platform.slice(0,2))}${a.avgViews!=null?' '+(a.avgViews>=1000?(a.avgViews/1000).toFixed(1)+'k':a.avgViews):''}</span>`).join(' ')}</td><td class="wrap">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="12" class="mute">Nobody matches.</td></tr>'}</table></div>
+  return `<div class="bar"><div class="seg">${[['all','All campaigns'],...S.campaigns.map(c=>[c.id,c.name])].map(([k,l])=>`<span class="${F.camp===k?'on':''}" data-fc="${esc(k)}">${esc(l)}</span>`).join('')}</div></div>
+  <div class="bar"><div class="seg">${FL.map(([k,l])=>`<span class="${F.flag===k?'on':''}" data-ff="${k}">${l}<i>${count(k)}</i></span>`).join('')}</div></div>
+  <div class="tw"><table><thead><tr><th>Creator</th><th>Campaign</th><th>Coach</th><th class="n">CPM 7d</th><th class="n">All-time</th><th class="n">Today</th><th class="n">Yest.</th><th class="n">7d</th><th class="n">Replies</th><th>Accounts</th><th>Flags</th></tr></thead><tbody>
+  ${shown.map(({c,x,f})=>`<tr><td><b>${esc(x.name)}</b> <span class="faint">${esc(x.handle)}</span></td><td class="mute">${esc(c.name)}</td><td class="mute">${esc(x.coach)}</td><td class="n ${x.cpm==null?'':x.cpm>c.targetCpm?'red':'grn'}">${money(x.cpm)}</td><td class="n ${x.cpmAllTime==null?'':x.cpmAllTime>c.targetCpm?'red':'grn'}">${money(x.cpmAllTime)}</td><td class="n">${x.postsToday}/${x.expectedPerDay}</td><td class="n">${x.postsYesterday}</td><td class="n">${x.posts7d}</td><td class="n">${x.responseRate==null?'—':x.responseRate+'%'}</td><td>${(x.accounts||[]).map(a=>`<span class="tag ${a.avgViews!=null?(a.avgViews<T.lowViews?'red':''):({red:'red',amber:'amb',green:'grn'}[a.health]||'')}" title="${esc(a.handle)}${a.health?' · health '+a.health:''}">${esc(a.platform.slice(0,2))}${a.avgViews!=null?' '+fmtN(a.avgViews):''}</span>`).join(' ')}</td><td class="wrapc">${f.map(g=>`<span class="tag ${g.c}">${esc(g.t)}</span>`).join(' ')}</td></tr>`).join('')||'<tr><td colspan="11" class="faint">Nobody matches.</td></tr>'}</tbody></table></div>
   <h2>Cut rules</h2><div class="card"><div class="bar">
-  <label>CPM above <input class="thr num" data-t="cutCpmMult" type="number" step="0.1" value="${T.cutCpmMult}" style="width:70px">× campaign target</label>
-  <label>Reply rate below <input class="thr num" data-t="minResp" type="number" value="${T.minResp}" style="width:70px">%</label>
-  <label>Post volume below <input class="thr num" data-t="minVolPct" type="number" value="${T.minVolPct}" style="width:70px">% of expected</label>
-  <label>Flag accounts averaging under <input class="thr num" data-t="lowViews" type="number" value="${T.lowViews}" style="width:70px"> views</label></div>
-  <div class="mute" style="font-size:12px">Any one of these flags a creator as a cut candidate. "Offer 5/day" = CPM under the campaign target and hit expected posts yesterday. Account view averages are checked once a day (last check ${ago(S.accountsCheckedAt)}).</div></div>`;
+  <label>CPM above <input class="num" data-t="cutCpmMult" type="number" step="0.1" value="${T.cutCpmMult}" style="width:70px"> × target</label>
+  <label>Replies below <input class="num" data-t="minResp" type="number" value="${T.minResp}" style="width:70px">%</label>
+  <label>Volume below <input class="num" data-t="minVolPct" type="number" value="${T.minVolPct}" style="width:70px">% of expected</label>
+  <label>Low views under <input class="num" data-t="lowViews" type="number" value="${T.lowViews}" style="width:80px"></label></div>
+  <div class="hint">Any one of these flags a cut candidate. Warming-up creators are never counted as missing posts.</div></div>`;
 }
-
 function vSlack(){
-  const item=m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span>${m.waitingMin!=null?`<span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}<span style="flex:1"></span>${dmUrl(m)?`<a class="dl" href="${esc(dmUrl(m))}" target="_blank" rel="noopener">Open in Discord ↗</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`;
-  const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0));
-  return '<div class="bar"><button class="sm" data-rescan="dms">↻ Recheck DMs</button><button class="sm" data-rescan="slack">↻ Recheck Slack</button></div><h2>Discord DMs waiting on you ('+dms.length+')</h2>'+(dms.map(item).join('')||'<p class="mute">'+(S.dms?'No DMs waiting.':'Not scanned yet.')+'</p>')+'<h2>Slack ('+S.slack.length+')</h2>'+(S.slack.length?vSlackList():'<p class="mute">'+((S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.')+'</p>');
-}
-function vSlackList(){
-  return S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin).map(m=>`<div class="msg"><div class="top"><b>${esc(m.from)}</b><span class="tag">${esc(m.channel)}</span><span class="num ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span><span style="flex:1"></span>${m.url?`<a href="${esc(m.url)}" style="color:var(--blu)">Open in Slack</a>`:''}</div><div class="q">${esc(m.text)}</div></div>`).join('');
+  const item=m=>`<div class="item">${av(m.from)}<div><div class="ihead"><b>${esc(m.from)}</b><span class="meta">${esc(m.channel)}</span><span class="sp"></span>${m.waitingMin!=null?`<span class="tag ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="quote">${esc(m.text)}</div><div class="actions">${dmUrl(m)?`<a class="lk" href="${esc(dmUrl(m))}" target="_blank" rel="noopener">Open in Discord ↗</a>`:''}${m.url?`<a class="lk" href="${esc(m.url)}">Open in Slack ↗</a>`:''}</div></div></div>`;
+  const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0)), sl=S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin);
+  return `<div class="bar"><button class="sm" data-rescan="dms">↻ Recheck DMs</button><button class="sm" data-rescan="slack">↻ Recheck Slack</button></div>
+  <h2>Discord DMs <span class="sub">${dms.length}</span></h2>${dms.length?`<div class="list">${dms.map(item).join('')}</div>`:`<div class="empty">${S.dms?'No DMs waiting.':'Not scanned yet.'}</div>`}
+  <h2>Slack <span class="sub">${sl.length}</span></h2>${sl.length?`<div class="list">${sl.map(item).join('')}</div>`:`<div class="empty">${(S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.'}</div>`}`;
 }
 function vAudits(){
-  if(!S.audits.length)return '<p class="mute">No audits loaded yet.</p>';
-  return `<div class="tw"><table><tr><th>Campaign</th><th>Coach</th><th>Week</th><th class="n">Score</th><th class="n">Strikes</th><th>Summary</th><th></th></tr>${S.audits.map(a=>`<tr><td>${esc((camp(a.campaign)||{}).name||a.campaign)}</td><td><b>${esc(a.coach)}</b></td><td class="mute">${esc(a.week)}</td><td class="n ${a.score<70?'red':a.score<85?'amb':'grn'}">${a.score}</td><td class="n ${a.strikes>=2?'red':a.strikes?'amb':''}">${a.strikes}</td><td class="wrap">${esc(a.summary)}</td><td>${a.notionUrl?`<a href="${esc(a.notionUrl)}" style="color:var(--blu)">Notion</a>`:''}</td></tr>`).join('')}</table></div>`;
+  if(!S.audits.length)return '<div class="empty">No weekly audits loaded yet. Daily coach checks are on each campaign\'s Coach audit tab.</div>';
+  return `<div class="tw"><table><thead><tr><th>Campaign</th><th>Coach</th><th>Week</th><th class="n">Score</th><th class="n">Strikes</th><th>Summary</th><th></th></tr></thead><tbody>${S.audits.map(a=>`<tr><td>${esc((camp(a.campaign)||{}).name||a.campaign)}</td><td><b>${esc(a.coach)}</b></td><td class="mute">${esc(a.week)}</td><td class="n ${a.score<70?'red':a.score<85?'amb':'grn'}">${a.score}</td><td class="n ${a.strikes>=2?'red':a.strikes?'amb':''}">${a.strikes}</td><td class="wrapc">${esc(a.summary)}</td><td>${a.notionUrl?`<a class="lk" href="${esc(a.notionUrl)}">Notion ↗</a>`:''}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
-// Recheck progress. The portal only knows when the run was fired and when each source's results land
-// (scanStatus.lpAt / discordAt / finishedAt), so the bar moves on those milestones and estimates in between.
-const PHASES={ // [key, label, minutes incl. run start-up for the first step, milestone in scanStatus]
-  all:[['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',11,'discordAt'],['slack','Slack',1.5,'finishedAt']],
-  campaign:[['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',3,'finishedAt']],
-  channel:[['discord','Discord channel',2.5,'finishedAt']],
-  dms:[['discord','Discord DMs',3,'finishedAt']],
-  slack:[['slack','Slack',3,'finishedAt']]};
-const scopeName=s=>!s||s==='all'?'Full scan':/^channel:/.test(s)?'Channel recheck':s==='dms'?'DMs recheck':s==='slack'?'Slack recheck':((camp(s)||{}).name||s)+' recheck';
+/* ---------- rescan menu ---------- */
+function renderMenu(){
+  const hist=scans().slice(0,8), keep=new Set([...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part));
+  $('#menu').innerHTML=`<div class="mi" data-rescan="all"><div class="ic">↻</div><div><div class="ttl">Full check</div><div class="d">Every campaign's analytics and Discord, your DMs and Slack · about 15 min</div></div></div>
+  <div class="msec"><div class="h">Pick what to check</div><div class="cbgrid"><span></span><span class="hd">Messages</span><span class="hd">Analytics</span>
+  ${CAMPS.map(k=>`<label>${NAMES[k]}</label><span class="cc"><input type="checkbox" data-part="dc.${k}" ${keep.has('dc.'+k)?'checked':''}></span><span class="cc"><input type="checkbox" data-part="lp.${k}" ${keep.has('lp.'+k)?'checked':''}></span>`).join('')}
+  <label><input type="checkbox" data-part="dms" ${keep.has('dms')?'checked':''}> Discord DMs</label><span></span><span></span>
+  <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
+  <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
+  <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
+}
+
+/* ---------- progress bar ---------- */
+function phasesFor(scope){
+  if(scope==='all')return [['lp','LaunchPoint',3.5,'lpAt'],['discord','Discord',11,'discordAt'],['slack','Slack',1.5,'finishedAt']];
+  if(/^channel:/.test(scope))return [['discord','Discord channel',2.5,'finishedAt']];
+  if(scope==='dms')return [['discord','Discord DMs',3,'finishedAt']];
+  if(scope==='slack')return [['slack','Slack',3,'finishedAt']];
+  const p=CAMPS.includes(scope)?['lp.'+scope,'dc.'+scope]:scope.slice(6).split(','), out=[];
+  const lp=p.filter(x=>x.startsWith('lp.')).length, dc=p.filter(x=>x.startsWith('dc.')).length, dms=p.includes('dms'), sl=p.includes('slack');
+  if(lp)out.push(['lp','LaunchPoint',2+lp*.4,'lpAt']);
+  if(dc||dms)out.push(['discord','Discord',(out.length?0:2)+dc*3+(dms?1:0),'discordAt']);
+  if(sl)out.push(['slack','Slack',(out.length?0:2)+1.5,'at']);
+  return out.length?out:[['x','Scan',3,'finishedAt']];
+}
 function progressInfo(){
   if(!live)return null;
   const now=Date.now(), rs=(S.queue||[]).filter(a=>a.type==='rescan'), a=rs.reduce((m,x)=>!m||+new Date(x.createdAt)>+new Date(m.createdAt)?x:m,null);
   const running=rs.find(x=>x.status==='running'), cur=running||a; if(!cur)return null;
-  const scope=cur.runScope||cur.scope||'all', name=scopeName(scope)+(cur.source==='schedule'?' (scheduled)':'');
-  const kind=scope==='all'?'all':/^channel:/.test(scope)?'channel':['dms','slack'].includes(scope)?scope:'campaign';
-  const ph=PHASES[kind], total=ph.reduce((s,p)=>s+p[2],0), age=runnerAge();
+  const scope=cur.runScope||cur.scope||'all', name=describeScope(scope)+(cur.source==='schedule'?' · scheduled':'');
+  const ph=phasesFor(scope), total=ph.reduce((s,p)=>s+p[2],0), age=runnerAge();
   const steps=ph.map(p=>({label:p[1],ok:false}));
   if(cur.status==='pending'){
     const waited=(now-new Date(cur.createdAt))/60000; if(waited>120)return null;
     const off=age==null||age>2;
-    return {name,steps,state:off?'late':'run',pct:2,text:off?`Waiting for the Mac Mini · it has not checked in ${age==null?'yet':'for '+wait(Math.round(age))}. Is it awake, with the runner installed?`:'Queued · the Mac Mini picks it up within 30 seconds'};
+    return {name,steps,state:off?'late':'run',pct:2,text:off?`Waiting for the Mac Mini · not seen ${age==null?'yet':'for '+wait(Math.round(age))}. Is it awake?`:'Queued · the Mac Mini picks it up within 30 seconds'};
   }
   if(cur.status==='done'||cur.status==='failed'||cur.status==='cancelled'){
     const fin=cur.finishedAt?+new Date(cur.finishedAt):0; if(!fin||now-fin>(cur.status==='done'?90000:15*60000))return null;
     if(cur.status==='done')return {name,steps:steps.map(s=>({...s,ok:true})),state:'done',pct:100,text:'Done · results updated'};
     return {name,steps,state:'late',pct:100,text:'Failed'+(cur.detail?': '+cur.detail:'')};
   }
-  // running: move on each source's results landing after the run started, estimate in between
   const t0=+new Date(cur.startedAt||cur.createdAt), st=S.scanStatus||{}, mins=(now-t0)/60000, hit=k=>st[k]&&+new Date(st[k])>=t0-5000?+new Date(st[k]):0;
   let acc=0,prev=t0,cp=ph[ph.length-1];
   ph.forEach((p,i)=>{steps[i].ok=!!hit(p[3])});
   for(const p of ph){const h=hit(p[3]);if(h){acc+=p[2];prev=Math.max(prev,h);continue}cp=p;break}
   const frac=Math.min(.95,(now-prev)/60000/cp[2]), pct=Math.max(3,Math.round((acc+frac*cp[2])/total*100));
   steps.forEach((s,i)=>s.now=!s.ok&&ph[i]===cp);
-  if(mins>total*2+5)return {name,steps,state:'late',pct,text:`Still running after ${Math.round(mins)} min · it may be stuck (logged out somewhere?). It is freed automatically after 40 min.`};
+  if(mins>total*2+5)return {name,steps,state:'late',pct,text:`Still running after ${Math.round(mins)} min · it may be stuck (logged out somewhere?). Freed automatically after 40 min.`};
   return {name,steps,state:'run',pct,text:(acc===0&&mins<1.5?'Starting on the Mac Mini':'Scanning '+cp[1])+` · about ${Math.max(1,Math.round(total-mins))} min left`};
 }
 function renderProgress(){
   const el=$('#progress'), p=progressInfo(); if(!el)return;
   if(!p){if(el.innerHTML)el.innerHTML='';return}
   const steps=p.steps.length>1?p.steps.map(s=>`<span class="${s.ok?'ok':s.now?'now':''}">${s.ok?'✓ ':''}${esc(s.label)}</span>`).join(''):'';
-  const link='';
   let box=el.querySelector('.prog');
-  if(!box){ // build once, then update pieces so the bar animates smoothly
-    el.innerHTML=`<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="top"><b class="pn"></b><span class="mute pt"></span><span style="flex:1"></span><span class="pl"></span><span class="num pp"></span></div><div class="track"><div class="fill" style="width:0"></div></div><div class="steps"></div></div>`;
-    box=el.querySelector('.prog');
-  }
+  if(!box){el.innerHTML=`<div class="prog" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="top2"><b class="pn"></b><span class="mute pt"></span><span class="sp"></span><span class="num faint pp"></span></div><div class="track"><div class="fill" style="width:0"></div></div><div class="steps"></div></div>`;box=el.querySelector('.prog')}
   box.className='prog '+p.state; box.setAttribute('aria-valuenow',p.pct);
   box.querySelector('.pn').textContent=p.name; box.querySelector('.pt').textContent=p.text; box.querySelector('.pp').textContent=p.pct+'%';
-  const pl=box.querySelector('.pl'); if(pl.innerHTML!==link)pl.innerHTML=link;
   const st=box.querySelector('.steps'); if(st.innerHTML!==steps)st.innerHTML=steps; st.style.display=steps?'':'none';
   box.querySelector('.fill').style.width=p.pct+'%';
 }
@@ -330,36 +682,43 @@ const typing=()=>['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.t
 let tick=0;
 setInterval(()=>{renderProgress();const p=progressInfo();if(p&&p.state!=='done'&&live&&++tick%5===0&&!typing())load()},1000);
 
+/* ---------- actions ---------- */
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
 async function sendTo(ids,text){
   const list=ids.map(cx).filter(x=>x&&x.inDiscord).map(x=>({type:'discord_send',campaign:'capcut',creator:x.name,channel:x.channel,channelId:x.channelId||null,text:fill(text,x.name)}));
-  if(!list.length||!text.trim())return toast('Nothing to send');
-  if(await act(list)){toast(`Queued ${list.length} message${list.length>1?'s':''}`+(live?'':' (preview: not sent)'));render()}
+  if(!list.length||!text.trim())return toast('Nothing to queue');
+  if(await act(list)){toast(`Queued ${plural(list.length,'message')} · sending isn't turned on yet`);render()}
 }
+async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target, d=t.dataset||{};
-  if(t.id==='refresh'){if(await act([{type:'rescan',scope:'all'}]))toast(fireMsg());render()}
-  else if(d.rescan){if(await act([{type:'rescan',scope:d.rescan}]))toast(fireMsg());render()}
-  else if(d.recheck){if(await act([{type:'rescan',scope:'channel:'+(d.camp||'capcut')+':'+d.recheck}]))toast(fireMsg());render()}
-  else if(d.reply){const u=camp('capcut').unanswered.find(x=>x.id===d.reply), text=$('#d_'+CSS.escape(d.reply)).value;
-    if(!text.trim())return toast('Write a reply first');
-    if(await act([{type:'discord_send',campaign:'capcut',creator:u.creator,channel:u.channel,channelId:u.channelId||null,text}])){sentIds.add(u.id);toast('Reply queued'+(live?'':' (preview: not sent)'));render()}}
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
+  if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
+  if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
+  else if(d.rescan)rescan(d.rescan);
+  else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
+  else if(d.copyreply){const text=$('#d_'+CSS.escape(d.copyreply)).value;if(!text.trim())return toast('Write a reply first');if(await copy(text)){copied.add(d.copyreply);toast('Reply copied · paste it in Discord');if(d.url)window.open(d.url,'_blank','noopener');render()}}
+  else if(d.welcome){const c=camp(d.camp),x=c.creators.find(y=>y.id===d.welcome),text=fill($('#wl_text').value,x.name);if(await copy(text)){copied.add('w'+x.id);toast('Welcome copied · paste it in '+(x.channel||'their channel'));const u=chanUrl(c,x.channelId);if(u)window.open(u,'_blank','noopener');render()}}
+  else if(d.copyta){if(await copy($('#'+CSS.escape(d.copyta)).value))toast('Copied')}
   else if(d.bulk){sendTo([...document.querySelectorAll('.pick_'+d.bulk+':checked')].map(i=>i.value),$('#bt_'+d.bulk).value)}
-  else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&x.channel&&(a==='all'||x.postsToday===0)).map(x=>x.id),$('#mm_text').value)}
+  else if(t.id==='mm_send'){const c=camp('capcut'),a=$('#mm_aud').value;sendTo(c.creators.filter(x=>x.inDiscord&&x.channel&&(a==='all'||(x.postsToday===0&&['posting','idle'].includes(cstat(c,x).k)))).map(x=>x.id),$('#mm_text').value)}
   else if(d.cancel){if(live){await fetch('api/actions/'+d.cancel,{method:'DELETE'});await load()}}
   else if(d.fc){F.camp=d.fc;render()}
   else if(d.ff){F.flag=d.ff;render()}
+  else if(d.who){WHO[d.wc]=d.who;render()}
 });
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset||{};
   if(t.id==='mm_tpl')$('#mm_text').value=TEMPLATES[t.value].text;
+  else if(t.id==='sortsel'){SORT=t.value;render()}
   else if(d.all)document.querySelectorAll('.pick_'+d.all).forEach(i=>i.checked=t.checked);
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
 });
-addEventListener('hashchange',render);
+document.addEventListener('input',e=>{if(e.target.id==='wl_text')$('#wl_prev').innerHTML=mentions(fill(e.target.value,'Jordan'))});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#menu').classList.remove('on')});
+addEventListener('hashchange',()=>{render();scrollTo(0,0)});
 load();
-// Live site only: pull fresh state every 30s unless you're mid-typing.
-setInterval(()=>{if(live&&!['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName))load()},30000);
+setInterval(()=>{if(live&&!typing()&&!$('#menu').classList.contains('on'))load()},30000);
 </script>
 </body>
 </html>

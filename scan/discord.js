@@ -1,6 +1,6 @@
 // Discord scan. Run in a discord.com tab (Claude in Chrome, Mac Mini). Read-only: opens channels and reads the DOM.
 // Optional scope, set before running: window.__discScope = {mode:'all'} (default) | {mode:'campaign', key:'capcut'} |
-//   {mode:'channel', key:'capcut', channelId:'123'} | {mode:'dms'}.
+//   {mode:'channel', key:'capcut', channelId:'123'} | {mode:'dms'} | {mode:'parts', keys:['capcut','melius'], dms:true}.
 // Starts in the background; poll window.__disc.progress until window.__disc.done is true.
 // Then read window.__disc.mine (Ty's CapCut creators waiting), and call window.discSubmit(drafts, acks, TOKEN):
 //   drafts = {"#channel-name": "reply text"}, acks = ["#channel-name", ...] (messages that need no reply).
@@ -50,25 +50,33 @@
     return out;
   }
   const clean = a => a.split('\n')[0].replace(/,\s*$/, '').trim(), isBot = m => m.b || /\bAPP\b/.test(m.a);
+  // Coach check-in windows (SOP: 3 a day, the last before 10 PM ET): start 5am-noon, mid noon-5pm, end 5-10pm ET.
+  const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
+  const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 && h < 22 ? 'c' : null; return w && `${p.year}-${p.month}-${p.day}:${w}`; };
+  const WARM = /warm(ing)?[\s-]?up|warming|warmup|warm(ed)? (my|the|up)?\s*(acc|account|feed|page)/i;
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
   function analyze(chans, staffRe) {
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
-    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, un = [], channels = {}, rt = {};
+    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, un = [], channels = {}, rt = {}, wins = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = COACH[key] || key, general = /announcement|general/i.test(c.name);
       const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, st: staffRe ? staffRe.test(clean(m.a)) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id }); }
+      hs.forEach(m => { if (m.st && m.t > now - 8 * 864e5) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
       if (general) { channels[c.id] = { name: c.name, cat: c.cat, coach, general: true }; continue; }
       let asked = 0, answered = 0;
       runs.forEach((r, i) => { const nx = runs[i + 1]; if (!r.st && nx && r.t > wk) (rt[coach] = rt[coach] || []).push((nx.t - r.t) / 6e4); if (r.st) { if (nx) { asked++; answered++; } else if (now - r.end > 864e5) asked++; } });
-      const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st);
+      const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st), firstS = hs.find(m => m.st);
+      const warm = [...hs].reverse().find(m => !m.st && WARM.test(m.x)), iso = t => t ? new Date(t).toISOString() : null;
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
-        lastCreatorMsgAt: lastC ? new Date(lastC.end).toISOString() : null, lastStaffMsgAt: lastS ? new Date(lastS.end).toISOString() : null };
+        lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), oldestMsgAt: iso(hs[0] && hs[0].t),
+        warmAt: iso(warm && warm.t), warmText: warm ? warm.x.slice(0, 160) : null };
       if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
         context: (runs[runs.length - 2] || { x: '' }).x.slice(-300), ack: L.n === 1 && L.x.length < 45 && !L.x.includes('?') && ACK.test(L.x.trim()) });
     }
     const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? Math.round(a[Math.floor(a.length / 2)]) : null; }, coachStats = {};
-    Object.keys(rt).forEach(k => coachStats[k] = { medianResponseMin: med(rt[k]), replies7d: rt[k].length });
+    Object.keys(rt).forEach(k => coachStats[k] = { medianResponseMin: med(rt[k]), replies7d: rt[k].length, over15h7d: rt[k].filter(m => m > 900).length });
+    Object.keys(wins).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkins = [...wins[k]].sort());
     return { coachStats, channels, unanswered: un };
   }
   (async () => {
@@ -81,7 +89,7 @@
         D.channelUpdates = [{ campaign: SC.key, guildId: G[1], channelId: SC.channelId, item: r.unanswered[0] || null, info: r.channels[SC.channelId] || null }];
       } catch (e) { D.errors.push('channel: ' + e); }
     }
-    for (const [key, g, re] of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key))) {
+    for (const [key, g, re] of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
       try {
         go(`/channels/${g}`); await sleep(3500);
         const sb = await sidebar(), list = sb.filter(x => !x.isCat && x.catName && re.test(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
@@ -90,7 +98,7 @@
         D.campaigns.push({ id: key, guildId: g, discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered });
       } catch (e) { D.errors.push(key + ': ' + e); }
     }
-    if (SC.mode === 'all' || SC.mode === 'dms') try {
+    if (SC.mode === 'all' || SC.mode === 'dms' || (SC.mode === 'parts' && SC.dms)) try {
       D.progress = 'dms'; go('/channels/@me'); await sleep(3000);
       const links = [...document.querySelectorAll('a[href^="/channels/@me/"]')].map(a => ({ id: a.getAttribute('href').split('/').pop(), label: (a.getAttribute('aria-label') || a.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 80) })).filter(x => /^\d+$/.test(x.id)).slice(0, 20);
       const res = []; for (const l of links) res.push({ ...l, ms: (await read(`/channels/@me/${l.id}`, l.id).catch(() => [])).map(m => ({ id: m.id, a: clean(m.a), t: m.t, x: m.x })).slice(-8) });
