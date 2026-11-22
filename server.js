@@ -151,7 +151,18 @@ app.post('/api/runner/ingest-form', express.urlencoded({ extended: false, limit:
 
 // --- user API ---
 app.use(userAuth);
-app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}) }));
+// Messages you marked as read. The key names the exact message (channel + its latest message time + a hash of the text),
+// so a new message from the same person gets a new key and shows up as unread again.
+const READ = path.join(DATA_DIR, 'read.json');
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}), read: readJson(READ, {}) }));
+app.post('/api/read', (req, res) => {
+  const b = req.body || {}, key = String(b.key || '');
+  if (!key || key.length > 300) return res.status(400).json({ error: 'key required' });
+  const r = readJson(READ, {}), cut = Date.now() - 45 * 864e5;
+  for (const k of Object.keys(r)) if (+new Date(r[k].at) < cut) delete r[k]; // forget marks after 45 days
+  if (b.read === false) delete r[key]; else r[key] = { at: new Date().toISOString(), label: String(b.label || '').slice(0, 120) };
+  writeJson(READ, r); res.json({ ok: true, read: r });
+});
 app.post('/api/actions', async (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
   for (const a of list) {

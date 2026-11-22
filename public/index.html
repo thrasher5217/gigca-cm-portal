@@ -127,6 +127,7 @@ th.sortable{cursor:pointer}th.sortable:hover{color:var(--text)}
 .actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap}
 .preview{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--text);white-space:pre-wrap}
 a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-space:nowrap}a.lk:hover{text-decoration:underline}
+.readsec{margin-top:14px}.readsec .item{opacity:.6}
 .empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
 
 /* rescan menu */
@@ -210,7 +211,32 @@ let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, offline=false, loc
 let T={cutCpmMult:1.5,minResp:50,minVolPct:50,lowViews:200};
 let F={camp:'all',flag:'all'};
 const WHO={capcut:'Ty McGuire'}; // coach filter per campaign page
-let SORT='wait';
+let SORT='wait', SHOWREAD=false;
+/* ---------- marked as read ---------- */
+// A mark names the exact message: channel + time of its latest message + a hash of the text. If the creator sends
+// anything new, the key changes and the item is back in the queue.
+const hh=t=>{let h=2166136261;for(const ch of String(t||''))h=Math.imul(h^ch.charCodeAt(0),16777619)>>>0;return h.toString(36)};
+const unKey=u=>'u:'+(u.channelId||u.id)+':'+(u.lastAt||'')+':'+hh(u.message);
+const dmKey=m=>'dm:'+m.id+':'+(m.lastAt||'')+':'+hh(m.text);
+const slKey=m=>'s:'+m.channel+':'+(m.lastAt||'')+':'+hh(m.text);
+const isRead=k=>!!(S.read&&S.read[k]);
+function applyRead(){
+  S.campaigns.forEach(c=>{const a=c.allUn||c.unanswered;c.unanswered=a.filter(u=>!isRead(unKey(u)));c.readUn=a.filter(u=>isRead(unKey(u)))});
+  if(S.allDms){S.dms=S.allDms.filter(m=>!isRead(dmKey(m)));S.readDms=S.allDms.filter(m=>isRead(dmKey(m)))}else S.readDms=[];
+  const sl=S.allSlack||[];S.slack=sl.filter(m=>!isRead(slKey(m)));S.readSlack=sl.filter(m=>isRead(slKey(m)));
+}
+async function markRead(key,label,on){
+  S.read=S.read||{};
+  if(on)S.read[key]={at:new Date().toISOString(),label};else delete S.read[key];
+  applyRead();render();toast(on?'Marked read · hidden until they send something new':'Back in the queue');
+  if(live)try{const r=await fetch('api/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,label,read:on})});if(!r.ok)throw new Error((await r.json()).error);S.read=(await r.json()).read||S.read}
+  catch(e){toast('Could not save: '+e.message)}
+}
+const readBtn=(key,label)=>`<button class="sm ghost" data-markread="${esc(key)}" data-label="${esc(label)}">✓ Mark read</button>`;
+function readSection(items,keyFn,row){
+  if(!items.length)return '';
+  return `<div class="readsec"><button class="sm ghost" data-showread="1">${SHOWREAD?'Hide':'Show'} marked read (${items.length})</button>${SHOWREAD?`<div class="list" style="margin-top:8px">${items.map(m=>row(m,`<button class="sm ghost" data-unread="${esc(keyFn(m))}">Mark unread</button>`)).join('')}</div>`:''}</div>`;
+}
 try{Object.assign(T,JSON.parse(localStorage.getItem('gk_thresholds')||'{}'))}catch(e){}
 
 /* ---------- helpers ---------- */
@@ -392,14 +418,16 @@ async function load(){
     // The real portal never shows made-up data: if the server can't be reached (e.g. mid-deploy), keep the last real data and retry.
     if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){offline=true;if(!S.campaigns.length&&!live)S={campaigns:[],slack:[],audits:[],queue:[]};render();clearTimeout(load.t);load.t=setTimeout(load,5000);return}
     try{S=await(await fetch('state.json')).json()}catch(e2){S={campaigns:[],slack:[],audits:[]}}live=false}
-  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];
+  S.queue=S.queue||[];S.slack=S.slack||[];S.audits=S.audits||[];S.read=S.read||{};S.allSlack=S.slack;S.allDms=S.dms||null;
   S.campaigns.forEach(c=>{c.unanswered=c.unanswered||[];c.creators=c.creators||[];
     if(c.discord){const ch=c.discord.channels||{},byCh={};
       c.creators.forEach(x=>{const d=x.channelId&&ch[x.channelId];if(d){x.coach=d.coach;x.responseRate=d.responseRate;x.channel='#'+d.name;byCh[x.channelId]=x}else if(c.discordScannedAt)x.coach='Unassigned'});
       c.unanswered.forEach(u=>{const x=byCh[u.channelId];if(x){u.creator=x.name;u.creatorId=x.id}});}
     c.coachNames=[...new Set([...Object.keys((c.discord||{}).coachStats||{}),...Object.values((c.discord||{}).channels||{}).filter(v=>!v.general).map(v=>v.coach),...c.creators.map(x=>x.coach)])].filter(n=>n&&n!=='Unassigned')
       .sort((a,b)=>c.creators.filter(x=>x.coach===b).length-c.creators.filter(x=>x.coach===a).length);
+    c.allUn=c.unanswered;
   });
+  applyRead();
   render();
 }
 async function act(list){
@@ -518,15 +546,16 @@ function vReply(c){
   const un=c.unanswered.filter(u=>!sentIds.has(u.id));
   let h=`<div class="bar">${whoSeg(c,un,k=>un.filter(u=>k==='all'||u.coach===k).length)}<span class="sp"></span><label class="hint">Sort <select id="sortsel">${[['wait','Longest waiting'],['new','Newest first'],['name','Name']].map(([k,l])=>`<option value="${k}" ${SORT===k?'selected':''}>${l}</option>`).join('')}</select></label></div>`;
   const list=c.unanswered.filter(u=>byWho(c,u.coach)).sort((a,b)=>SORT==='name'?String(a.creator).localeCompare(b.creator):SORT==='new'?a.waitingMin-b.waitingMin:b.waitingMin-a.waitingMin);
-  if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>';
+  const rd=readSection((c.readUn||[]).filter(u=>byWho(c,u.coach)),unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
+  if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
   const over=list.filter(u=>u.waitingMin>=900).length;
   h+=`<p class="lede">${plural(list.length,'creator')} spoke last and ${list.length===1?'is':'are'} waiting${over?`, <span class="red">${over} over 15h</span>`:''}. Drafts are AI suggestions in your voice; edit, then copy and open the message in Discord.</p><div class="list">`;
   for(const u of list){const done=sentIds.has(u.id)||copied.has(u.id), url=msgUrl(c,u);
     h+=`<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div>
     <div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}
     <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…">${esc(u.draft||'')}</textarea>
-    <div class="actions"><button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>${openLink(url,!!u.messageId)}<span class="sp"></span>${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
-  return h+'</div>';
+    <div class="actions"><button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`}
+  return h+'</div>'+rd;
 }
 
 function newJoiners(c){
@@ -551,12 +580,13 @@ function vInbox(c){
   const un=c.unanswered.slice().sort((a,b)=>b.waitingMin-a.waitingMin), old=un.reduce((m,u)=>Math.max(m,u.waitingMin),0);
   if(!c.discordScannedAt&&!S.sample)return '<div class="empty">Discord has not been scanned for this campaign yet.</div>';
   let h='<div class="kpis">'+kpi(un.length,'Creators waiting on a reply',un.length?'amb':'')+kpi(old?wait(old):'—','Longest wait',waitCls(old))+kpi(un.filter(u=>u.waitingMin>=900).length,'Over 15h (SOP limit)',un.some(u=>u.waitingMin>=900)?'red':'')+kpi(un.filter(u=>u.waitingMin>=300).length,'Over 5h')+'</div><p class="lede" style="margin-top:12px">Auditing only: replies go through the coach.</p>';
-  if(!un.length)return h+'<div class="empty">Everyone has been answered.</div>';
+  const rd=readSection(c.readUn||[],unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
+  if(!un.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
   for(const coach of [...new Set(un.map(u=>u.coach||'Unassigned'))]){
     const list=un.filter(u=>(u.coach||'Unassigned')===coach);
-    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
+    h+=`<h2>${esc(coach)} <span class="sub">${list.length}</span></h2><div class="list">${list.map(u=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)}</span><span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">no reply for ${wait(u.waitingMin)}</span></div><div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">Last from coach: ${esc(u.context)}</div>`:''}<div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}</div></div></div>`).join('')}</div>`;
   }
-  return h;
+  return h+rd;
 }
 
 const CHECKCOLS=[['reply','15h replies'],['median','Median <5h'],['checkins','Check-ins'],['contact','New 24h'],['posted','Posting'],['volume','Volume'],['idle','3-day idle'],['cpm','CPM'],['warm','Warm-up'],['first','Day 5'],['quiet','48h contact']];
@@ -663,11 +693,11 @@ function vCreators(){
   <div class="hint">Any one of these flags a cut candidate. Warming-up creators are never counted as missing posts.</div></div>`;
 }
 function vSlack(){
-  const item=m=>`<div class="item">${av(m.from)}<div><div class="ihead"><b>${esc(m.from)}</b><span class="meta">${esc(m.channel)}</span><span class="sp"></span>${m.waitingMin!=null?`<span class="tag ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="quote">${esc(m.text)}</div><div class="actions">${dmUrl(m)?`<a class="lk" href="${esc(dmUrl(m))}" target="_blank" rel="noopener">Open in Discord ↗</a>`:''}${m.url?`<a class="lk" href="${esc(m.url)}">Open in Slack ↗</a>`:''}</div></div></div>`;
+  const item=(m,btn)=>`<div class="item">${av(m.from)}<div><div class="ihead"><b>${esc(m.from)}</b><span class="meta">${esc(m.channel)}</span><span class="sp"></span>${m.waitingMin!=null?`<span class="tag ${waitCls(m.waitingMin)}">waiting ${wait(m.waitingMin)}</span>`:''}</div><div class="quote">${esc(m.text)}</div><div class="actions">${dmUrl(m)?`<a class="lk" href="${esc(dmUrl(m))}" target="_blank" rel="noopener">Open in Discord ↗</a>`:''}${m.url?`<a class="lk" href="${esc(m.url)}">Open in Slack ↗</a>`:''}<span class="sp"></span>${btn}</div></div></div>`;
   const dms=(S.dms||[]).slice().sort((a,b)=>(b.waitingMin||0)-(a.waitingMin||0)), sl=S.slack.slice().sort((a,b)=>b.waitingMin-a.waitingMin);
   return `<div class="bar"><button class="sm" data-rescan="dms">↻ Recheck DMs</button><button class="sm" data-rescan="slack">↻ Recheck Slack</button></div>
-  <h2>Discord DMs <span class="sub">${dms.length}</span></h2>${dms.length?`<div class="list">${dms.map(item).join('')}</div>`:`<div class="empty">${S.dms?'No DMs waiting.':'Not scanned yet.'}</div>`}
-  <h2>Slack <span class="sub">${sl.length}</span></h2>${sl.length?`<div class="list">${sl.map(item).join('')}</div>`:`<div class="empty">${(S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.'}</div>`}`;
+  <h2>Discord DMs <span class="sub">${dms.length}</span></h2>${dms.length?`<div class="list">${dms.map(m=>item(m,readBtn(dmKey(m),m.from+' DM'))).join('')}</div>`:`<div class="empty">${S.dms?'No DMs waiting.':'Not scanned yet.'}</div>`}${readSection(S.readDms||[],dmKey,item)}
+  <h2>Slack <span class="sub">${sl.length}</span></h2>${sl.length?`<div class="list">${sl.map(m=>item(m,readBtn(slKey(m),m.from+' '+m.channel))).join('')}</div>`:`<div class="empty">${(S.scanStatus&&S.scanStatus.slack==='ok')||S.sample?'Nothing waiting on you in Slack.':'Not scanned yet.'}</div>`}${readSection(S.readSlack||[],slKey,item)}`;
 }
 function vAudits(){
   if(!S.audits.length)return '<div class="empty">No weekly audits loaded yet. Daily coach checks are on each campaign\'s Coach audit tab.</div>';
@@ -749,7 +779,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
@@ -765,6 +795,9 @@ document.addEventListener('click',async e=>{
   else if(d.ff){F.flag=d.ff;render()}
   else if(d.who){WHO[d.wc]=d.who;render()}
   else if(d.tf){TF=d.tf;render()}
+  else if(d.markread)markRead(d.markread,d.label||'',true);
+  else if(d.unread)markRead(d.unread,'',false);
+  else if(d.showread){SHOWREAD=!SHOWREAD;render()}
 });
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset||{};

@@ -71,7 +71,7 @@
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
         lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), oldestMsgAt: iso(hs[0] && hs[0].t),
         warmAt: iso(warm && warm.t), warmText: warm ? warm.x.slice(0, 160) : null };
-      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
+      if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, lastAt: iso(L.end), channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - L.t) / 6e4), message: L.x.slice(0, 600),
         context: (runs[runs.length - 2] || { x: '' }).x.slice(-300), ack: L.n === 1 && L.x.length < 45 && !L.x.includes('?') && ACK.test(L.x.trim()) });
     }
     const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? Math.round(a[Math.floor(a.length / 2)]) : null; }, coachStats = {};
@@ -107,7 +107,7 @@
       const cnt = {}; res.forEach(r => new Set(r.ms.map(m => m.a)).forEach(a => cnt[a] = (cnt[a] || 0) + 1));
       const me = (Object.entries(cnt).sort((a, b) => b[1] - a[1])[0] || [''])[0], now = Date.now();
       D.dms = res.map(r => { const L = r.ms[r.ms.length - 1]; if (!L || L.a === me) return null; let i = r.ms.length - 1; while (i > 0 && r.ms[i - 1].a !== me) i--; const run = r.ms.slice(i);
-        return { id: r.id, messageId: run[0].id || null, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
+        return { id: r.id, messageId: run[0].id || null, lastAt: run[run.length - 1].t || null, from: r.label.replace(/^unread, /, '').replace(/ \((direct message|group message)\).*$/, ''), channel: 'Discord DM', unread: /^unread/.test(r.label), waitingMin: Math.round((now - new Date(run[0].t)) / 6e4), text: run.map(m => m.x).join('\n').slice(0, 500) }; }).filter(x => x && x.waitingMin < 14 * 1440);
     } catch (e) { D.errors.push('dms: ' + e); }
     const cc = D.campaigns.find(c => c.id === 'capcut'), one = D.channelUpdates && SC.key === 'capcut' && D.channelUpdates[0] && D.channelUpdates[0].item;
     D.mine = one ? [one].filter(u => !u.ack).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : cc ? cc.unanswered.filter(u => !u.ack && /^Ty\b/.test(u.coach)).sort((a, b) => b.waitingMin - a.waitingMin).map(u => `${u.channel} | ${Math.round(u.waitingMin / 60)}h | COACH SAID: ${u.context.replace(/\n/g, ' ').slice(-160)} | CREATOR: ${u.message.replace(/\n/g, ' / ').slice(0, 360)}`) : [];

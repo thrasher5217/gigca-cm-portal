@@ -23,7 +23,7 @@
         const isDm = !/^(brand-|launchpoint-)/.test(r.name), lastTy = Math.max(-1, ...r.ms.map((m, i) => /^Ty McGuire/.test(m.a) ? i : -1)), after = r.ms.slice(lastTy + 1);
         const pick = isDm ? after : after.filter(m => /@Ty\b|@Ty McGuire|@channel|@here/.test(m.x)); if (!pick.length) continue;
         const w = Math.round((now - pick[0].t) / 6e4); if (w > 7 * 1440) continue;
-        S.items.push({ id: 's-' + r.name + '-' + pick[0].t, channel: isDm ? 'Slack DM: ' + r.name : '#' + r.name, from: pick[pick.length - 1].a, text: pick.map(m => m.x).join('\n').slice(0, 500), waitingMin: w });
+        S.items.push({ id: 's-' + r.name + '-' + pick[0].t, channel: isDm ? 'Slack DM: ' + r.name : '#' + r.name, from: pick[pick.length - 1].a, lastAt: new Date(pick[pick.length - 1].t).toISOString(), text: pick.map(m => m.x).join('\n').slice(0, 500), waitingMin: w });
       }
     } catch (e) { S.error = String(e); }
     const payload = { completeRescans: true, slack: S.items, scanStatus: { slack: S.error ? 'failed: ' + S.error : 'ok', at: new Date().toISOString() } };
