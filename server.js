@@ -80,7 +80,7 @@ app.get('/api/runner/pending', runnerAuth, (req, res) => res.json(getQueue().fil
 app.post('/api/runner/claim', runnerAuth, (req, res) => {
   const rn = readJson(RUNNER, {}), q = getQueue(), now = new Date().toISOString();
   rn.lastPollAt = now; rn.host = String((req.body || {}).host || '').slice(0, 60);
-  if (q.some(a => (a.type === 'rescan' || a.live) && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'the Mac Mini is busy' }); }
+  if (q.some(a => (a.type === 'rescan' || a.type === 'audit' || a.live) && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'the Mac Mini is busy' }); }
   // Replies to send go first: they're quick. A waiting scan is picked up on the next poll, 30 seconds later.
   const sends = q.filter(a => a.type === 'discord_send' && a.live && a.status === 'pending').slice(0, 10);
   if (sends.length) {
@@ -94,7 +94,15 @@ app.post('/api/runner/claim', runnerAuth, (req, res) => {
     const a = { id: crypto.randomUUID(), type: 'rescan', scope: 'all', source: 'schedule', status: 'pending', createdAt: now };
     q.push(a); picked = [a]; rn.lastSlot = slot;
   }
-  if (!picked.length) { writeJson(RUNNER, rn); return res.json({ scope: null }); }
+  if (!picked.length) {
+    // The in-depth campaign audit: when asked for, or every 2 days (7 AM to 9 PM Chicago), once nothing else is waiting.
+    let au = q.find(a => a.type === 'audit' && a.status === 'pending');
+    const hr = +new Intl.DateTimeFormat('en-US', { timeZone: SCHEDULE.tz, hour: '2-digit', hourCycle: 'h23' }).format(new Date());
+    if (!au && hr >= 7 && hr < 21 && (!rn.lastAuditAt || Date.now() - Date.parse(rn.lastAuditAt) > 48 * 36e5) && (!rn.lastAuditTry || Date.now() - Date.parse(rn.lastAuditTry) > 3 * 36e5)) {
+      au = { id: crypto.randomUUID(), type: 'audit', source: 'schedule', status: 'pending', createdAt: now }; q.push(au); }
+    if (au) { au.status = 'running'; au.startedAt = now; rn.lastAuditTry = now; writeJson(QUEUE, q); writeJson(RUNNER, rn); return res.json({ scope: null, audit: { id: au.id } }); }
+    writeJson(RUNNER, rn); return res.json({ scope: null });
+  }
   const scope = mergeScopes(picked.map(a => SCOPE_OK.test(String(a.scope || 'all')) ? String(a.scope || 'all') : 'all'));
   picked.forEach(a => { a.status = 'running'; a.startedAt = now; a.runScope = scope; });
   if (scope === 'all' && slot) rn.lastSlot = slot; // a manual full scan in the slot window counts as the scheduled one
@@ -143,6 +151,49 @@ app.post('/api/runner/ingest', runnerAuth, (req, res) => {
   writeJson(STATE, cur); res.json({ ok: true });
 });
 
+// --- campaign audit (Mac Mini, every 2 days) ---
+// Last calendar week (Monday to Sunday, Chicago) as dates and as [start, end) times.
+const chiDate = t => new Date(t).toLocaleDateString('en-CA', { timeZone: SCHEDULE.tz });
+const addDay = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+const chiMidnight = d => { const h = +new Intl.DateTimeFormat('en-US', { timeZone: SCHEDULE.tz, hour: '2-digit', hourCycle: 'h23' }).format(new Date(d + 'T12:00:00Z')); return Date.parse(d + 'T00:00:00Z') + (12 - h) * 36e5; };
+function lastWeek(now = Date.now()) {
+  const today = chiDate(now), end = addDay(today, -(((new Date(today + 'T12:00:00Z').getUTCDay() + 6) % 7) + 1)), from = addDay(end, -6);
+  return { from, to: end, t0: chiMidnight(from), t1: chiMidnight(addDay(end, 1)) };
+}
+const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
+// What the audit writer reads: one compact block per campaign, last week's numbers and coach stats.
+function auditDigest() {
+  const st = readJson(STATE, { campaigns: [] }), w = lastWeek(), m0 = w.t0 / 6e4, m1 = w.t1 / 6e4, days = Array.from({ length: 7 }, (_, i) => addDay(w.from, i));
+  return { week: { from: w.from, to: w.to }, generatedAt: new Date().toISOString(), campaigns: (st.campaigns || []).map(c => {
+    const chans = (c.discord || {}).channels || {}, stats = (c.discord || {}).coachStats || {}, coachOf = x => (chans[x.channelId] || {}).coach || 'Unassigned';
+    const names = [...new Set([...Object.keys(stats), ...Object.values(chans).filter(v => !v.general).map(v => v.coach)])].filter(n => n && n !== 'Unassigned');
+    const un = c.unanswered || [], cr = c.creators || [];
+    return { id: c.id, name: c.name || c.id, yourRole: MINE.includes(c.id) ? 'Ty coaches these creators himself' : 'Ty oversees the coaches (Giga CM)', targetCpm: c.targetCpm || 4,
+      lastWeek: c.lastWeek || null, cpm7d: c.cpm ?? null, cpmAllTime: c.cpmAllTime ?? null, analyticsScannedAt: c.scannedAt || null, discordScannedAt: c.discordScannedAt || null,
+      coaches: names.map(n => { const cs = stats[n] || {}, r = (cs.resp || []).filter(e => e[0] >= m0 && e[0] < m1).map(e => e[1]), ck = new Set(cs.checkins || []);
+        const mine = cr.filter(x => coachOf(x) === n), wait = un.filter(u => u.coach === n);
+        return { name: n, creators: mine.length || Object.values(chans).filter(v => v.coach === n && !v.general).length, repliesLastWeek: r.length, medianReplyMinutes: med(r), repliesOver15h: r.filter(x => x > 900).length,
+          acknowledgmentsNeedingNoReply: (cs.acks || []).filter(x => x >= m0 && x < m1).length, checkinsHit: days.reduce((a, d) => a + ['a', 'b', 'c'].filter(k => ck.has(d + ':' + k)).length, 0), checkinsPossible: 21,
+          waitingNow: wait.length, waitingOver15hNow: wait.filter(u => u.waitingMin >= 900).length,
+          postsLastWeek: mine.reduce((a, x) => a + ((x.rng && x.rng.w && x.rng.w.posts) || 0), 0), viewsLastWeek: mine.reduce((a, x) => a + ((x.rng && x.rng.w && x.rng.w.v) || 0), 0) }; }),
+      creators: cr.slice(0, 200).map(x => ({ name: x.name, coach: coachOf(x), daysOnCampaign: x.daysOnCampaign, everPosted: x.everPosted, lastPostAt: x.lastPostAt, expectedPerDay: x.expectedPerDay,
+        postsLastWeek: x.rng && x.rng.w ? x.rng.w.posts : null, viewsLastWeek: x.rng && x.rng.w ? x.rng.w.v : null, cpmLastWeek: x.rng && x.rng.w ? x.rng.w.cpm : null,
+        posts7d: x.posts7d, last7Days: x.daily, cpm7d: x.cpm, cpmAllTime: x.cpmAllTime, inDiscord: x.inDiscord })),
+      waitingOldest: un.slice().sort((a, b) => b.waitingMin - a.waitingMin).slice(0, 15).map(u => ({ channel: u.channel, coach: u.coach, hoursWaiting: Math.round(u.waitingMin / 60), message: String(u.message || '').slice(0, 160) })) };
+  }) };
+}
+app.get('/api/runner/audit-input', runnerAuth, (req, res) => res.json(auditDigest()));
+app.post('/api/runner/audit', runnerAuth, (req, res) => {
+  const b = req.body || {}, q = getQueue(), a = q.find(x => x.id === b.id && x.type === 'audit'), now = new Date().toISOString();
+  if (!b.audits || typeof b.audits !== 'object' || Array.isArray(b.audits)) return res.status(400).json({ error: 'audits must be an object keyed by campaign id' });
+  const cur = readJson(AUDITS, {}), w = lastWeek(), clip = (v, n) => typeof v === 'string' ? v.slice(0, n) : Array.isArray(v) ? v.slice(0, 30).map(x => clip(x, n)) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).slice(0, 30).map(([k, x]) => [k, clip(x, n)])) : v;
+  let n = 0; for (const [cid, au] of Object.entries(b.audits)) if (CAMPS.includes(cid) && au && typeof au === 'object') { cur[cid] = { ...clip(au, 1500), week: `${w.from} to ${w.to}`, generatedAt: now }; n++; }
+  writeJson(AUDITS, cur);
+  if (a) { a.status = n ? 'done' : 'failed'; a.finishedAt = now; a.detail = n ? `${n} campaigns` : 'no campaigns in the audit'; writeJson(QUEUE, q); }
+  if (n) { const rn = readJson(RUNNER, {}); rn.lastAuditAt = now; writeJson(RUNNER, rn); }
+  res.json({ ok: !!n, saved: n });
+});
+
 // Browser-tab ingest: Claude in Chrome submits a plain form from the LaunchPoint/Discord/Slack tab
 // (cross-origin form posts need no CORS). Fields: token, payload (JSON). Merges into current state.
 function mergeState(inc) {
@@ -179,7 +230,8 @@ app.use(userAuth);
 // Messages you marked as read. The key names the exact message (channel + its latest message time + a hash of the text),
 // so a new message from the same person gets a new key and shows up as unread again.
 const READ = path.join(DATA_DIR, 'read.json');
-app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}), read: readJson(READ, {}), schedule: SCHEDULE }));
+const AUDITS = path.join(DATA_DIR, 'campaign-audits.json'); // in-depth weekly campaign audits written by the Mac Mini
+app.get('/api/state', (req, res) => res.json({ ...getState(), queue: getQueue().slice(-200), live: true, runner: readJson(RUNNER, {}), read: readJson(READ, {}), schedule: SCHEDULE, campaignAudits: readJson(AUDITS, {}) }));
 app.post('/api/read', (req, res) => {
   const b = req.body || {}, key = String(b.key || '');
   if (!key || key.length > 300) return res.status(400).json({ error: 'key required' });
@@ -199,7 +251,7 @@ app.post('/api/read', (req, res) => {
 app.post('/api/actions', async (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [req.body], q = getQueue(), out = [];
   for (const a of list) {
-    if (!['discord_send', 'rescan'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
+    if (!['discord_send', 'rescan', 'audit'].includes(a.type)) return res.status(400).json({ error: 'unknown action type' });
     // Sending is only for Ty's own campaigns (CapCut, YRI); every other campaign is oversight.
     if (a.type === 'discord_send' && (!SENDABLE.includes(a.campaign) || (!MINE.includes(a.campaign) && a.live !== true) || !a.channel || !String(a.text || '').trim()))
       return res.status(400).json({ error: 'discord_send needs campaign capcut, yri or coaches, a channel and text' });
@@ -215,7 +267,7 @@ app.post('/api/actions', async (req, res) => {
   // Rescans wait in the queue until the Mac Mini claims them (it asks every 30s). Only fixed scope formats are accepted,
   // and a scope that is already waiting is not queued twice.
   out.forEach(a => { if (a.type === 'rescan' && SCOPE_OK.test(String(a.scope || 'all'))) a.scope = normScope(String(a.scope || 'all')); });
-  const keep = out.filter(a => a.type !== 'rescan' || (SCOPE_OK.test(a.scope || 'all') && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
+  const keep = out.filter(a => a.type === 'audit' ? !q.some(x => x.type === 'audit' && (x.status === 'pending' || x.status === 'running')) : a.type !== 'rescan' || (SCOPE_OK.test(a.scope || 'all') && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
   keep.forEach(a => { if (a.type === 'rescan') a.scope = a.scope || 'all'; });
   writeJson(QUEUE, q.concat(keep));
   res.json({ queued: keep, runner: readJson(RUNNER, {}) });

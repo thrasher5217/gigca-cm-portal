@@ -68,6 +68,26 @@ if [[ -n "$sends" && "$sends" != "[]" ]]; then
   exit 0
 fi
 
+# The in-depth campaign audit (every 2 days): fetch last week's digest, have Claude write the audit, upload it.
+aid=$(json_get "$resp" audit.id)
+if [[ -n "$aid" ]]; then
+  afail() { local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({status:"failed",detail:a[0]})}' "$1")
+    curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" "$PORTAL/api/runner/actions/$aid" >/dev/null 2>&1; log "audit failed: $1"; }
+  log "audit start id=$aid"
+  git -C "$DIR" pull --ff-only -q >/dev/null 2>&1 || log "git pull failed; using the scripts already here"
+  [[ -x "$CLAUDE" ]] || { afail "Claude Code is not installed on the Mac Mini"; exit 1; }
+  IN="$CONF/audit-input.json"; OUTF="$CONF/audit-out.json"; BODY="$CONF/audit-body.json"
+  curl -fsS -m 60 -H "Authorization: Bearer $TOKEN" "$PORTAL/api/runner/audit-input" -o "$IN" || { afail "could not download the audit data"; exit 0; }
+  prompt="$(<"$DIR/runner/audit.md")"$'\n\n'"INPUT_FILE=$IN"
+  out=$(cd "$DIR" && perl -e 'alarm shift; exec @ARGV' 900 "$CLAUDE" -p "$prompt" --no-session-persistence --add-dir "$CONF" --allowedTools "Read" 2>&1)
+  print -r -- "$out" | awk '/^AUDIT_JSON_START$/{f=1;next}/^AUDIT_JSON_END$/{f=0}f' > "$OUTF"
+  if [[ ! -s "$OUTF" ]]; then print -r -- "$out" | tail -20 | sed 's/^/    /' >> "$LOG"; afail "the audit came back empty"; exit 0; fi
+  { print -rn -- "{\"id\":\"$aid\",\"audits\":"; cat "$OUTF"; print -rn -- "}"; } > "$BODY"
+  if r=$(curl -fsS -m 60 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data-binary @"$BODY" "$PORTAL/api/runner/audit" 2>&1); then log "audit done: $r"
+  else afail "upload failed (the audit was not valid JSON?)"; fi
+  exit 0
+fi
+
 [[ -z "$scope" ]] && exit 0                            # nothing to do; this is the normal case
 ids=$(json_get "$resp" ids); [[ -z "$ids" ]] && ids="[]"
 P='((lp|dc)\.(capcut|artlist|creatify|melius|yri)|dms|slack|coaches)'

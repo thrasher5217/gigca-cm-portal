@@ -79,6 +79,7 @@ input[type=checkbox]{accent-color:var(--acc2);width:15px;height:15px;vertical-al
 .seg span{padding:4px 10px;border-radius:7px;color:var(--t2);cursor:pointer;font-weight:500;font-size:12.5px;user-select:none;white-space:nowrap}
 .seg span:hover{color:var(--text)}.seg span.on{background:var(--s3);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.2)}
 .seg span i{font-style:normal;color:var(--t3);margin-left:5px;font-variant-numeric:tabular-nums}.seg span i.red{color:var(--red);font-weight:600}
+.custd{display:inline-flex;gap:6px;align-items:center;color:var(--t2);font-size:12.5px}.custd input{padding:4px 8px;color-scheme:light dark}
 
 /* surfaces */
 .card{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
@@ -129,6 +130,21 @@ th.sortable{cursor:pointer}th.sortable:hover{color:var(--text)}
 a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-space:nowrap}a.lk:hover{text-decoration:underline}
 .readsec{margin-top:14px}.readsec .item{opacity:.6}
 .empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
+
+/* check details on hover */
+#tipbox{position:fixed;z-index:60;max-width:340px;background:var(--s1);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;font-size:12.5px;line-height:1.5;color:var(--t2);display:none;pointer-events:none}
+#tipbox.on{display:block;animation:pop .12s ease-out}
+#tipbox h4{margin:0 0 4px;font-size:13px;color:var(--text);display:flex;gap:8px;align-items:center}
+#tipbox .rl{display:grid;grid-template-columns:20px 1fr;gap:3px 8px;align-items:start;margin:8px 0 2px}
+#tipbox .rl .ck{width:18px;height:18px;font-size:10px}
+#tipbox .now{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--text)}
+[data-tipk]{cursor:help}td[data-tipk]:hover,td[data-tipk]:focus{background:var(--s2);outline:none}
+.sumgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+.sumc h3 .verdict{font-size:11.5px;font-weight:600;padding:1px 9px;border-radius:20px}
+.sumc .lines{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:12.5px}
+.sumc .lines div{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start}
+.sumc .lines .ck{width:18px;height:18px;font-size:10px}
+.sumc .ai{margin-top:10px;padding:9px 11px;border-radius:9px;background:var(--accbg);color:var(--text);font-size:12.5px}
 
 /* coach ranking */
 .rank{border-bottom:1px solid var(--line)}.rank:last-child{border-bottom:0}
@@ -196,6 +212,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
   <div class="wrap"><div id="banner"></div><div id="view"></div></div>
 </main>
 <div id="toast"></div>
+<div id="tipbox" role="tooltip"></div>
 <script>
 /* ---------- constants ---------- */
 const CAMPS=['capcut','artlist','creatify','melius','yri'];
@@ -354,10 +371,21 @@ const tagsOf=c=>{if(!c)return[];const own=new Set(MINE.includes(c.id)?pendingUn(
 const waitingOn=c=>c?(MINE.includes(c.id)?pendingUn(c).concat(tagsOf(c)):c.unanswered):[];
 
 /* ---------- coach daily audit (UGC Coach SOP + strike rules) ---------- */
-const TFS=[['today','Today so far'],['yday','Yesterday'],['7d','7 days'],['30d','30 days']];
+const TFS=[['today','Today so far'],['yday','Yesterday'],['7d','7 days'],['lw','Last week'],['30d','30 days'],['custom','Custom']];
+const chiDate=t=>new Date(t).toLocaleDateString('en-CA',{timeZone:'America/Chicago'});
+const addDay=(d,n)=>new Date(Date.parse(d+'T12:00:00Z')+n*DAY).toISOString().slice(0,10);
+const dayStart=d=>chiMid(Date.parse(d+'T12:00:00Z')+6*H); // Chicago midnight starting date d (noon UTC is that day in Chicago)
+// Custom range (Chicago dates, inclusive). LaunchPoint day-by-day data covers the last 30 days.
+let CUST={from:addDay(chiDate(Date.now()),-13),to:addDay(chiDate(Date.now()),-1)};
+const lastWeek=(now=Date.now())=>{const today=chiDate(now),end=addDay(today,-(((new Date(today+'T12:00:00Z').getUTCDay()+6)%7)+1));return {from:addDay(end,-6),to:end}};
+const tfLow=tf=>{const l=tfLabel(tf);return tf==='custom'?l:l[0].toLowerCase()+l.slice(1)}; // lower-cases the first letter only, not month names
+const fmtD=d=>new Date(d+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
+const tfLabel=tf=>tf==='lw'?(()=>{const w=lastWeek();return `Last week (${fmtD(w.from)}–${fmtD(w.to)})`})():tf==='custom'?`${fmtD(CUST.from)}–${fmtD(CUST.to)}`:(TFS.find(t=>t[0]===tf)||[])[1];
+// Posts per day for the last 30 days as [{date,n}], from LaunchPoint (null when the scan hasn't collected it yet).
+const days30=(c,x)=>{const d=x.d30;if(!d)return null;const ds=c.days30&&c.days30.length===d.length?c.days30:d.map((_,i)=>addDay(chiDate(Date.now()),i-(d.length-1)));return d.map((n,i)=>({date:ds[i],n:n||0}))};
 let TF='today';
 const chiMid=t=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));return t-((+p.hour*60+ +p.minute)*60+ +p.second)*1000-new Date(t).getMilliseconds()};
-function tfWin(tf,now=Date.now()){const m=chiMid(now);return tf==='today'?[m,now]:tf==='yday'?[m-DAY,m]:tf==='7d'?[now-7*DAY,now]:[now-30*DAY,now]}
+function tfWin(tf,now=Date.now()){const m=chiMid(now);if(tf==='lw'){const w=lastWeek(now);return [dayStart(w.from),dayStart(addDay(w.to,1))]}if(tf==='custom'){const a=CUST.from<=CUST.to?CUST:{from:CUST.to,to:CUST.from};return [dayStart(a.from),Math.min(now,dayStart(addDay(a.to,1)))]}return tf==='today'?[m,now]:tf==='yday'?[m-DAY,m]:tf==='7d'?[now-7*DAY,now]:[now-30*DAY,now]}
 // What the response numbers leave out or time at the Mark read click, for one window.
 const leftOut=(cs,t0,t1)=>{const inW=a=>(a||[]).filter(m=>m*6e4>=t0&&m*6e4<t1).length,a=inW(cs.acks),m=inW(cs.marked);
   return (a?` · ${plural(a,'acknowledgment')} (ok, thanks…) needed no reply`:'')+(m?` · ${m} timed at your Mark read click`:'')};
@@ -372,7 +400,8 @@ function audit(c,name,tf=TF){
   const un=c.unanswered.filter(u=>(u.coach||'Unassigned')===name).sort((a,b)=>b.waitingMin-a.waitingMin);
   const cs=((c.discord||{}).coachStats||{})[name]||{}, chans=(c.discord||{}).channels||{}, mine=Object.entries(chans).filter(([id,v])=>v.coach===name&&!v.general), crCh=new Set(cr.map(r=>r.x.channelId).filter(Boolean));
   const checks=[], add=o=>checks.push({items:[],...o}), nm=r=>r.x.channel||r.x.name, scanned=c.discordScannedAt||S.sample, scanAt=+new Date(c.discordScannedAt||now);
-  const active=cr.filter(r=>r.s.k==='posting'||r.s.k==='idle'), TFL=(TFS.find(t=>t[0]===tf)||[])[1];
+  const active=cr.filter(r=>r.s.k==='posting'||r.s.k==='idle'), TFL=tfLabel(tf), WK=tf==='7d'||tf==='lw', RANGE=tf==='lw'||tf==='custom'||tf==='30d';
+  const inWin=d=>{const t=dayStart(d)+12*H;return t>=t0&&t<t1&&d<chiDate(now)}; // whole days only: today is still in progress
   // history coverage: the scan reads the latest messages in each channel, so long windows may not be fully loaded
   const covered=mine.filter(([id,v])=>(v.msgs||0)<45||(v.oldestMsgAt&&+new Date(v.oldestMsgAt)<=t0)||(snow(id)||0)>=t0).length, cov=mine.length?covered/mine.length:1;
   const covNote=cov<.9?` · history loaded for ${Math.round(cov*100)}% of channels`:'';
@@ -385,14 +414,15 @@ function audit(c,name,tf=TF){
     detail:(lateNow.length?`${lateNow.length} still waiting over 15h`:'')+(slow15.length?`${lateNow.length?' · ':''}${slow15.length} answered after 15h+`:'')+(!n15?'Every creator answered within 15h':'')+covNote,items:lateNow.map(u=>`${u.channel} · waiting ${wait(u.waitingMin)}`)});
   // 2. median response under 5h
   const mins=ev.map(e=>e[1]), md=cs.resp?med(mins):(tf==='7d'?cs.medianResponseMin:null);
-  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:tf==='7d'&&md>300?'Strike 3 · median over 5h this week':null});
+  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:WK&&md>300?'Strike 3 · median over 5h this week':null});
   // 3. check-ins, 3 a day (ET), last before 10 PM
   if(cs.checkins){
-    const set=new Set(cs.checkins), nd=tf==='today'?1:tf==='yday'?1:tf==='7d'?7:30, startOff=tf==='yday'?1:0, h=+etParts(scanAt).hour;
-    let poss=0,hit=0;const missed=[];
-    for(let i=startOff;i<startOff+nd;i++){const d=etDay(scanAt-i*DAY);WIN.forEach(w=>{if(i===0&&h<w[2])return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(d.slice(5)+' '+w[1])})}
+    const set=new Set(cs.checkins), h=+etParts(scanAt).hour, today=etDay(scanAt), days=[];
+    for(let t=t0+6*H;t<t1;t+=DAY){const d=etDay(t);if(d<=today&&!days.includes(d))days.push(d)}
+    const nd=days.length;let poss=0,hit=0;const missed=[];
+    days.forEach(d=>WIN.forEach(w=>{if(d===today&&h<w[2])return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(d.slice(5)+' '+w[1])}));
     const miss=poss-hit, perWeek=nd>=7?miss/nd*7:miss;
-    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice(-20),strike:tf==='7d'&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
+    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice(-20),strike:WK&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
   }else add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:'na',v:'next scan',detail:'Measured from the next full scan'});
   // 4. new creators contacted within 24h of joining
   const fresh=mine.filter(([id])=>{const j=snow(id);return j&&j>=t0-(tf==='today'||tf==='yday'?DAY:0)&&j<t1});
@@ -405,22 +435,31 @@ function audit(c,name,tf=TF){
   }else if(tf==='7d'){
     const rows=active.map(r=>{const d=r.x.daily,af=d?activeFrom(r.x):99;let m=0;if(d)for(let i=Math.max(0,af);i<6;i++)if(!d[i])m++;return {r,m,has:!!d}}), esc2=rows.filter(o=>o.m>=2), any=rows.filter(o=>o.m>=1);
     add({k:'posted',mt:'Missed days this week (2+ means escalate to the CM)',label:'Nobody with 2+ missed days this week',state:!active.length?'na':!rows.some(o=>o.has)?'na':esc2.length?'bad':any.length?'warn':'ok',v:rows.some(o=>o.has)?`${esc2.length} with 2+`:'next scan',detail:esc2.length?`${plural(esc2.length,'creator')} missed 2+ days · escalate to the CM`:any.length?`${plural(any.length,'creator')} missed 1 day`:'Everyone active posted every day',items:any.sort((a,b)=>b.m-a.m).map(o=>`${nm(o.r)} · ${plural(o.m,'day')} missed`)});
-  }else add({k:'posted',label:'Daily posting',state:'na',v:'7d only',detail:'LaunchPoint only gives a day-by-day strip for the last 7 days. See post volume for 30 days.'});
+  }else{
+    // Last week / 30 days / custom: missed days per active creator from LaunchPoint's 30-day daily posts (from their first post on)
+    const rows=active.map(r=>{const d=days30(c,r.x);if(!d)return {r,has:false,m:0};const sum=d.reduce((a,b)=>a+b.n,0),f=r.x.postsAllTime>sum?0:d.findIndex(o=>o.n>0);
+      return {r,has:true,m:f<0?0:d.slice(f).filter(o=>inWin(o.date)&&!o.n).length}}), has=rows.some(o=>o.has), esc2=rows.filter(o=>o.m>=2), any=rows.filter(o=>o.m>=1);
+    add({k:'posted',mt:`Missed days (${TFL.toLowerCase()}, 2+ means escalate to the CM)`,label:'Nobody with 2+ missed days',state:!active.length||!has?'na':esc2.length?'bad':any.length?'warn':'ok',v:has?`${esc2.length} with 2+`:'next scan',detail:!has?'Day-by-day posts for this range arrive with the next full scan':esc2.length?`${plural(esc2.length,'creator')} missed 2+ days · escalate to the CM`:any.length?`${plural(any.length,'creator')} missed 1 day`:'Everyone active posted every day',items:any.sort((a,b)=>b.m-a.m).map(o=>`${nm(o.r)} · ${plural(o.m,'day')} missed`)});
+  }
   // 6. post volume vs quota
   const vol=active.map(r=>{const x=r.x,exp=x.expectedPerDay||c.expectedPerDay||3;
     if(tf==='today')return {r,got:x.postsToday||0,exp:exp};if(tf==='yday')return {r,got:x.postsYesterday||0,exp:exp};
     if(tf==='7d'){const af=x.daily?Math.max(0,activeFrom(x)):0;return {r,got:x.posts7d||0,exp:exp*(7-Math.min(af,6))}}
+    const d=days30(c,x);if(d){const sum=d.reduce((a,b)=>a+b.n,0),f=x.postsAllTime>sum?0:d.findIndex(o=>o.n>0),w=f<0?[]:d.slice(f).filter(o=>inWin(o.date));return {r,got:w.reduce((a,b)=>a+b.n,0),exp:exp*w.length}}
+    if(tf!=='30d')return {r,got:null,exp:0};
     const days=Math.min(30,Math.max(1,(x.daysOnCampaign||30)-2));return {r,got:x.rng&&x.rng.m?x.rng.m.posts:null,exp:exp*days}}).filter(o=>o.got!=null);
   const got=vol.reduce((s,o)=>s+o.got,0), exp=vol.reduce((s,o)=>s+o.exp,0), pct=exp?Math.round(got/exp*100):null, under=vol.filter(o=>o.exp&&o.got/o.exp<.5);
-  add({k:'volume',label:'Post volume vs quota',state:pct==null?'na':tf==='today'?(pct>=100?'ok':'na'):pct<50?'bad':pct<80?'warn':'ok',v:pct==null?(tf==='30d'?'next scan':'—'):pct+'%',detail:pct==null?(tf==='30d'?'30-day totals arrive with the next full scan':'No active creators'):`${got} of ${exp} expected posts (${pct}%)${tf==='today'?' so far today':''}`,items:tf==='today'?[]:under.sort((a,b)=>a.got/a.exp-b.got/b.exp).map(o=>`${nm(o.r)} · ${o.got}/${o.exp}`)});
+  add({k:'volume',label:'Post volume vs quota',state:pct==null?'na':tf==='today'?(pct>=100?'ok':'na'):pct<50?'bad':pct<80?'warn':'ok',v:pct==null?(RANGE?'next scan':'—'):pct+'%',detail:pct==null?(RANGE?'Day-by-day posts for this range arrive with the next full scan':'No active creators'):`${got} of ${exp} expected posts (${pct}%)${tf==='today'?' so far today':''}`,items:tf==='today'?[]:under.sort((a,b)=>a.got/a.exp-b.got/b.exp).map(o=>`${nm(o.r)} · ${o.got}/${o.exp}`)});
   // 7. 3+ days without a post after warm-up
   const idle=cr.filter(r=>r.s.k==='idle'&&r.s.days>=3).map(r=>`${nm(r)} · ${r.s.days}d now`);
-  if(tf==='7d'||tf==='30d')active.forEach(r=>{const d=r.x.daily;if(!d||r.s.k==='idle'&&r.s.days>=3)return;let run=0,mx=0;for(let i=Math.max(0,activeFrom(r.x));i<6;i++){run=d[i]?0:run+1;mx=Math.max(mx,run)}if(mx>=3)idle.push(`${nm(r)} · ${mx}-day gap this week`)});
+  if(tf==='7d')active.forEach(r=>{const d=r.x.daily;if(!d||r.s.k==='idle'&&r.s.days>=3)return;let run=0,mx=0;for(let i=Math.max(0,activeFrom(r.x));i<6;i++){run=d[i]?0:run+1;mx=Math.max(mx,run)}if(mx>=3)idle.push(`${nm(r)} · ${mx}-day gap this week`)});
+  if(RANGE)active.forEach(r=>{const d=days30(c,r.x);if(!d||r.s.k==='idle'&&r.s.days>=3)return;const sum=d.reduce((a,b)=>a+b.n,0),f=r.x.postsAllTime>sum?0:d.findIndex(o=>o.n>0);if(f<0)return;let run=0,mx=0;d.slice(f).filter(o=>inWin(o.date)).forEach(o=>{run=o.n?0:run+1;mx=Math.max(mx,run)});if(mx>=3)idle.push(`${nm(r)} · ${mx}-day gap`)});
   add({k:'idle',label:'Nobody 3+ days without a post after warm-up',state:idle.length?'bad':'ok',v:idle.length?String(idle.length):'0',detail:idle.length?plural(idle.length,'creator')+' · same-day escalation to the CM':'Nobody',items:idle});
   // 8. group CPM
-  const tgt=c.targetCpm||4, src=tf==='today'?'t':tf==='yday'?'y':tf==='30d'?'m':null;
+  const tgt=c.targetCpm||4, src=tf==='today'?'t':tf==='yday'?'y':tf==='30d'?'m':tf==='lw'?'w':null;
   const g=groupCpm(cr.map(r=>src?(r.x.rng&&r.x.rng[src]?[r.x.rng[src].cpm,r.x.rng[src].v]:[null,0]):[r.x.cpm,r.x.views7d]));
-  add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:g==null?'na':g<=tgt?'ok':'warn',v:g==null?(src&&!cr.some(r=>r.x.rng)?'next scan':'no views'):money(g),detail:g==null?(src&&!cr.some(r=>r.x.rng)?'Per-timeframe CPM arrives with the next full scan':'No views in this window'):money(g)+(tf==='7d'&&g<tgt?' · under target, removes a strike':''),bonus:tf==='7d'&&g!=null&&g<tgt});
+  if(tf==='custom')add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:'na',v:'n/a',detail:"LaunchPoint CPM isn't collected for custom dates. Use 7 days, Last week or 30 days for CPM."});
+  else add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:g==null?'na':g<=tgt?'ok':'warn',v:g==null?(src&&!cr.some(r=>r.x.rng)?'next scan':'no views'):money(g),detail:g==null?(src&&!cr.some(r=>r.x.rng)?'Per-timeframe CPM arrives with the next full scan':'No views in this window'):money(g)+(WK&&g<tgt?' · under target, removes a strike':''),bonus:WK&&g!=null&&g<tgt});
   const counts={};cr.forEach(r=>counts[r.s.k]=(counts[r.s.k]||0)+1);
   return {name,tf,tfLabel:TFL,cr,un,cs,checks,counts,strikes:checks.filter(k=>k.strike).map(k=>k.strike),bad:checks.filter(k=>k.state==='bad').length,warn:checks.filter(k=>k.state==='warn').length};
 }
@@ -450,11 +489,11 @@ const LINE={
   cpm:k=>`Group CPM is ${k.v}, over the target`};
 function coachMsg(a){
   const lines=a.all.filter(k=>k.state==='bad'||k.state==='warn').map(k=>'- '+LINE[k.k](k));
-  const when={today:'today so far',yday:'yesterday','7d':'over the last 7 days','30d':'over the last 30 days'}[a.tf];
+  const when={today:'today so far',yday:'yesterday','7d':'over the last 7 days','30d':'over the last 30 days',lw:'last week',custom:tfLabel('custom')}[a.tf];
   return lines.length?`Hey ${first(a.name)}, quick check on your creators (${when}):\n${lines.join('\n')}\nCan you get these handled today and let me know?`:'';
 }
 const ck=st=>`<span class="ck ${st}" title="${st==='ok'?'On track':st==='bad'?'Needs action':st==='warn'?'Watch':'No data'}">${st==='ok'?'✓':st==='bad'?'✕':st==='warn'?'!':'–'}</span>`;
-const tfSeg=()=>`<div class="seg">${TFS.map(([k,l])=>`<span class="${TF===k?'on':''}" data-tf="${k}">${l}</span>`).join('')}</div>`;
+const tfSeg=()=>`<div class="seg">${TFS.map(([k,l])=>`<span class="${TF===k?'on':''}" data-tf="${k}">${l}</span>`).join('')}</div>${TF==='custom'?`<span class="custd"><input type="date" id="cust_from" value="${CUST.from}" min="${addDay(chiDate(Date.now()),-30)}" max="${chiDate(Date.now())}"> to <input type="date" id="cust_to" value="${CUST.to}" min="${addDay(chiDate(Date.now()),-30)}" max="${chiDate(Date.now())}"></span>`:TF==='lw'?`<span class="hint">${esc(tfLabel('lw').replace('Last week ',''))}</span>`:''}`;
 
 /* ---------- data load ---------- */
 async function load(){
@@ -629,7 +668,7 @@ function vCampaign(id,sub){
   const c=camp(id); if(!c)return `<div class="empty">No ${NAMES[id]} data yet.</div>`;
   const cap=MINE.includes(id), audits=c.coachNames.map(n=>fullAudit(c,n));
   const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],...(c.creators.length||newJoiners(c).length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[...(tagsOf(c).length?[['tagged','Tagged you',tagsOf(c).length,true]]:[]),['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
-    ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],
+    ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],['caudit','Campaign audit',null],
     ...audits.map(a=>['coach:'+a.name,first(a.name),a.bad,a.bad>0]),
     ['posts',"Didn't post",null],['warm','Warming up',c.creators.filter(x=>cstat(c,x).k==='warming').length,false],
     ...(id==='capcut'?[['scale','Offer 5/day',null],['mass','Mass message',null]]:[]),...(cap?[['queue','Queue',null]]:[])];
@@ -641,6 +680,7 @@ function vCampaign(id,sub){
   if(cur==='inbox')return h+vInbox(c);
   if(cur==='tagged'){const t=tagsOf(c).sort((a,b)=>b.waitingMin-a.waitingMin);return h+`<p class="lede">${plural(t.length,'message')} where someone tagged you in a ${esc(c.name)} creator channel and you haven't replied or reacted yet. These don't count against the coach.</p>`+(t.length?`<div class="list">${t.map(u=>replyItem(c,u)).join('')}</div>`:'<div class="empty">Nobody is waiting on you here.</div>')}
   if(cur==='summary')return h+vSummary(c,audits);
+  if(cur==='caudit')return h+vCampAudit(c);
   if(cur.startsWith('coach:'))return h+vCoach(c,audits.find(a=>a.name===cur.slice(6)));
   if(cur==='posts')return h+vPosts(c);
   if(cur==='warm')return h+vWarm(c);
@@ -713,18 +753,88 @@ function vInbox(c){
 }
 
 const CHECKCOLS=[['reply','15h replies'],['median','Median <5h'],['checkins','Check-ins'],['contact','New 24h'],['posted','Posting'],['volume','Volume'],['idle','3-day idle'],['cpm','CPM'],['warm','Warm-up'],['first','Day 5'],['quiet','48h contact']];
+/* ---------- what each check means and how it's graded (shown on hover) ---------- */
+const RULES={
+  reply:{t:'Replies within 15h',w:'Every creator message gets a coach reply within 15 hours (UGC Coach SOP). Counts creators still waiting now plus replies that took longer in this window.',ok:'No creator waited over 15h',bad:'Anyone waited (or is waiting) over 15h'},
+  median:{t:'Median response time',w:'The middle reply time across all creator messages the coach answered in this window. Acknowledgments like "ok, thanks" start no clock; your Mark read counts as a reply.',ok:'3h or less',warn:'Between 3h and 5h',bad:'Over 5h (Strike 3 on the weekly views)'},
+  checkins:{t:'3 check-ins a day',w:'A coach message in their channels or announcements in each window, Eastern time: start 5am–noon, mid noon–5pm, end 5–10pm.',ok:'Every window hit',warn:'Some missed (weekly views)',bad:'Any missed (one day), or 7+ missed in a week (Strike 5)'},
+  contact:{t:'New creators contacted in 24h',w:'Each creator who joined in this window got a first coach message within 24 hours of their channel being made.',ok:'Every new creator contacted within 24h',bad:'Anyone contacted late, or not at all'},
+  posted:{t:'Active creators posting',w:'Only active creators count (warming up and first-post-due are left out). Today: who has posted so far. Yesterday: who missed. Longer views: missed days per creator.',ok:'Nobody missed',warn:'Someone has 1 missed day (or hasn\'t posted yet today)',bad:'Anyone missed yesterday, or has 2+ missed days (escalate to the CM)'},
+  volume:{t:'Post volume vs quota',w:'Posts made versus expected (posts a day × active days) across the coach\'s active creators.',ok:'80% or more of quota',warn:'50–80%',bad:'Under 50%'},
+  idle:{t:'No 3-day posting gaps',w:'Active creators going 3+ days without a post after warm-up. That needs same-day escalation to the CM.',ok:'Nobody',bad:'Anyone with a 3+ day gap'},
+  cpm:{t:'Group CPM vs target',w:'Spend ÷ views × 1000 across all the coach\'s creators in this window, compared with the campaign target.',ok:'At or under target (removes a strike on the weekly views)',warn:'Over target'},
+  warm:{t:'Warm-up over 7 days',w:'Right now: creators still warming up more than 7 days after joining.',ok:'Nobody',warn:'1 creator',bad:'2 or more (Strike 4)'},
+  first:{t:'Day-5 first post',w:'Right now: creators past day 5 with no first post (SOP: first post within 5 days of onboarding).',ok:'Nobody',bad:'Anyone past day 5'},
+  quiet:{t:'48h contact',w:'Right now: every creator heard from their coach in the last 48 hours.',ok:'Everyone',warn:'Anyone with no coach message in 48h+'}};
+const tipAttr=(k,x,who)=>`data-tipk="${k}" data-tips="${x?x.state:''}" data-tipd="${esc(x?((who?who+': ':'')+x.detail+(x.strike?' · '+x.strike:'')):'')}" tabindex="0"`;
+function showTip(el){const r=RULES[el.dataset.tipk];if(!r)return;const b=$('#tipbox'),st=el.dataset.tips,d=el.dataset.tipd;
+  b.innerHTML=`<h4>${st?ck(st):''}${esc(r.t)}</h4><div>${esc(r.w)}</div><div class="rl">${ck('ok')}<span>${esc(r.ok)}</span>${r.warn?ck('warn')+`<span>${esc(r.warn)}</span>`:''}${r.bad?ck('bad')+`<span>${esc(r.bad)}</span>`:''}${ck('na')}<span>No data for this window</span></div>${d?`<div class="now">${esc(d)}</div>`:''}`;
+  b.classList.add('on');const e=el.getBoundingClientRect(),bw=b.offsetWidth,bh=b.offsetHeight;let x=Math.min(Math.max(8,e.left+e.width/2-bw/2),innerWidth-bw-8),y=e.bottom+8;if(y+bh>innerHeight-8)y=Math.max(8,e.top-bh-8);b.style.left=x+'px';b.style.top=y+'px'}
+const hideTip=()=>{const b=$('#tipbox');if(b)b.classList.remove('on')};
+document.addEventListener('mouseover',e=>{const el=e.target.closest&&e.target.closest('[data-tipk]');if(el)showTip(el);else hideTip()});
+document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-tipk]');if(el)showTip(el)});
+addEventListener('scroll',hideTip,true);
+
+/* ---------- campaign audit (last calendar week) ---------- */
+// Numbers and coach checks are worked out live from the scans; the written part (grade, verdicts, priorities) comes from
+// the Mac Mini every 2 days, or on demand.
+const pctCh=(a,b)=>a==null||!b?null:Math.round((a-b)/b*100);
+const chg=(a,b,inv)=>{const p=pctCh(a,b);if(p==null)return '';const good=inv?p<0:p>0;return ` <span class="${p===0?'faint':good?'grn':'red'}" style="font-size:12px">${p>0?'+':''}${p}% vs week before</span>`};
+function vCampAudit(c){
+  const au=(S.campaignAudits||{})[c.id], lw=c.lastWeek, w=lastWeek(), job=queue().find(a=>a.type==='audit'&&(a.status==='pending'||a.status==='running'));
+  const last=queue().filter(a=>a.type==='audit').sort((a,b)=>+new Date(b.createdAt)-+new Date(a.createdAt))[0];
+  const next=au?new Date(+new Date(au.generatedAt)+48*H):null;
+  let h=`<div class="bar"><span class="hint">Week of ${esc(fmtD(w.from))}–${esc(fmtD(w.to))} · ${au?`written ${ago(au.generatedAt)}${next?` · next update ${next>Date.now()?'in about '+wait(Math.round((next-Date.now())/6e4)):'due'}`:''}`:'not written yet'}${last&&last.status==='failed'&&!job?` · <span class="red">last run failed: ${esc(last.detail||'')}</span>`:''}</span><span class="sp"></span>${job?`<span class="tag acc">${job.status==='running'?'Writing on the Mac Mini…':'Queued for the Mac Mini'}</span>`:`<button class="sm" data-runaudit="1">Run audit now</button>`}</div>`;
+  if(au&&au.week&&au.week!==`${w.from} to ${w.to}`)h+=`<p class="hint">The written audit below is for ${esc(au.week)}; the numbers and coach checks are for last week.</p>`;
+  const G={A:'grn',B:'grn',C:'amb',D:'red',F:'red'}[String(au&&au.grade||'').toUpperCase()]||'';
+  if(au)h+=`<div class="card" style="margin-bottom:12px"><h3>${au.grade?`<span class="tag ${G}" style="font-size:14px;padding:2px 12px">${esc(au.grade)}</span>`:''}${esc(au.headline||'Campaign audit')}</h3><p style="margin:0;color:var(--text)">${esc(au.summary||'')}</p></div>`;
+  else h+=`<div class="empty" style="margin-bottom:12px">The written audit runs every 2 days on the Mac Mini (or press Run audit now). The numbers and coach checks below are live.</div>`;
+  h+=`<h2>Numbers <span class="sub">last week, from LaunchPoint</span></h2>`+(lw?`<div class="kpis">${kpi(fmtN(lw.views||0),'Views'+chg(lw.views,lw.prevViews))}${kpi(lw.posts??'—','Posts'+chg(lw.posts,lw.prevPosts))}${kpi(money(lw.cpm),'CPM (target '+money(c.targetCpm)+')'+chg(lw.cpm,lw.prevCpm,true),lw.cpm==null?'':lw.cpm>c.targetCpm?'red':'grn')}${kpi(lw.creators??'—','Creators posting')}${kpi(money(c.cpmAllTime),'All-time CPM',c.cpmAllTime==null?'':c.cpmAllTime>c.targetCpm?'red':'grn')}</div>`:`<div class="empty">No LaunchPoint numbers for last week yet${c.scannedAt?'':' (no LaunchPoint data for this campaign)'}. They arrive with the next full check.</div>`);
+  if(au&&au.numbers)h+=`<p class="lede" style="margin-top:10px">${esc(au.numbers)}</p>`;
+  if(lw&&lw.top&&lw.top.length)h+=`<h2>Top videos</h2><div class="tw"><table><thead><tr><th>Creator</th><th>Platform</th><th class="n">Views</th><th></th></tr></thead><tbody>${lw.top.map(v=>`<tr><td><b>${esc(v.creator||'')}</b></td><td class="mute">${esc(v.platform||'')}</td><td class="n">${fmtN(v.views||0)}</td><td>${v.url?`<a class="lk" href="${esc(v.url)}" target="_blank" rel="noopener">Watch ↗</a>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+  const rows=c.coachNames.map(n=>{const a=fullAudit(c,n,'lw');return {a,sc:scoreOf(a),note:au&&(au.coaches||[]).find(x=>x.name===n)}}).sort((x,y)=>(y.sc.score??-1)-(x.sc.score??-1));
+  h+=`<h2>Coach performance <span class="sub">last week · hover a mark for how it's graded</span></h2>`+(rows.length?`<div class="list">${rows.map(({a,sc,note})=>{const col=sc.score==null?'var(--t3)':sc.score>=85?'var(--grn)':sc.score>=60?'var(--amb)':'var(--red)';
+    return `<div class="item" style="grid-template-columns:32px 1fr">${av(a.name)}<div><div class="ihead"><b>${esc(a.name)}</b><span class="meta">${plural(a.cr.length,'creator')}</span>${note&&note.rating?`<span class="tag ${/strong/i.test(note.rating)?'grn':/on track/i.test(note.rating)?'blu':/attention/i.test(note.rating)?'amb':'red'}">${esc(note.rating)}</span>`:''}<span class="sp"></span><b class="num" style="color:${col}">${sc.score==null?'—':sc.score+'%'}</b></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${a.all.map(k=>`<span class="tag" ${tipAttr(k.k,k,first(a.name))} style="gap:6px">${ck(k.state)}${esc(SHORT[k.k]||k.label)}</span>`).join('')}</div>
+    ${note&&note.summary?`<p style="margin:8px 0 0;color:var(--text)">${esc(note.summary)}</p>`:''}${note&&note.fix&&note.fix.length?`<ul style="margin:6px 0 0;padding-left:18px;color:var(--t2)">${note.fix.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`:''}
+    ${a.strikes.length?`<div class="hint" style="margin-top:6px"><span class="amb">Strike risks:</span> ${a.strikes.map(esc).join(' · ')}</div>`:''}</div></div>`}).join('')}</div>`:'<div class="empty">No coaches found yet.</div>');
+  const list=(t,arr,f)=>arr&&arr.length?`<div class="card"><h3>${t}</h3><ul style="margin:0;padding-left:18px">${arr.map(x=>`<li style="margin:3px 0">${f?f(x):esc(x)}</li>`).join('')}</ul></div>`:'';
+  if(au)h+=`<h2>Takeaways</h2><div class="cards">${list('Wins',au.wins)}${list('Problems',au.problems)}${list('Creators to watch',au.creatorsToWatch,x=>`<b>${esc(x.name||'')}</b> · ${esc(x.reason||'')}`)}${list('Priorities for next week',au.nextWeek)}</div>${au.dataGaps&&au.dataGaps.length?`<p class="hint" style="margin-top:10px">Data gaps: ${au.dataGaps.map(esc).join(' · ')}</p>`:''}`;
+  return h;
+}
+
+/* ---------- coach summary (end of Coach checks) ---------- */
+const scoreOf=a=>{const g=a.all.filter(x=>x.state!=='na'),ok=g.filter(x=>x.state==='ok').length,wn=g.filter(x=>x.state==='warn').length;return {score:g.length?Math.round((ok+wn/2)/g.length*100):null,ok,graded:g.length}};
+const SHORT=Object.fromEntries(CHECKCOLS);
+function coachSummary(c,a){
+  const sc=scoreOf(a), bad=a.all.filter(k=>k.state==='bad'), warn=a.all.filter(k=>k.state==='warn'), good=a.all.filter(k=>k.state==='ok');
+  const v=sc.score==null?['No data yet','']:sc.score>=85&&!a.strikes.length?['Strong','grn']:sc.score>=70?['On track','blu']:sc.score>=50?['Needs attention','amb']:['Behind','red'];
+  const fn=first(a.name), col={grn:'var(--grn)',blu:'var(--blu)',amb:'var(--amb)',red:'var(--red)'}[v[1]]||'var(--t3)';
+  const sent=sc.score==null?`Not enough data yet to judge ${fn} for ${tfLow(a.tf)}.`
+    :`${fn} passes ${sc.ok} of ${sc.graded} checks for ${tfLow(a.tf)}${bad.length?`, with ${plural(bad.length,'problem')} to fix: ${bad.map(k=>SHORT[k.k]||k.label).join(', ')}`:warn.length?`; nothing failing, ${plural(warn.length,'thing')} to watch`:', with nothing failing'}.`+(a.strikes.length?` At risk of ${plural(a.strikes.length,'strike')} this week.`:'')
+    +` Looks after ${plural(a.cr.length,'creator')}${a.un.length?`, ${a.un.length} waiting on a reply now`:''}.`;
+  const aud=(S.campaignAudits||{})[c.id], note=aud&&(aud.coaches||[]).find(x=>x.name===a.name);
+  return `<div class="card sumc"><h3>${esc(a.name)}<span class="verdict" style="background:color-mix(in srgb,${col} 14%,transparent);color:${col}">${v[0]}</span><span class="sp"></span><span class="num" style="color:${col}">${sc.score==null?'—':sc.score+'%'}</span></h3>
+    <div class="rbar" style="margin:0"><span class="tr" style="max-width:none"><i style="width:${sc.score??0}%;background:${col}"></i></span></div>
+    <p style="margin:10px 0 0;color:var(--text)">${esc(sent)}</p>
+    <div class="lines">${bad.map(k=>`<div>${ck('bad')}<span><b>${esc(SHORT[k.k]||k.label)}</b> · ${esc(k.detail)}</span></div>`).join('')}${warn.map(k=>`<div>${ck('warn')}<span><b>${esc(SHORT[k.k]||k.label)}</b> · ${esc(k.detail)}</span></div>`).join('')}${good.length?`<div>${ck('ok')}<span class="mute">Doing well: ${esc(good.map(k=>SHORT[k.k]||k.label).join(', '))}</span></div>`:''}${a.strikes.map(s=>`<div><span class="ck warn">!</span><span class="amb">${esc(s)}</span></div>`).join('')}</div>
+    ${note&&note.summary?`<div class="ai"><b>Campaign audit${aud.week?' ('+esc(aud.week)+')':''}:</b> ${esc(note.summary)}</div>`:''}
+    <div class="actions"><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Full coach page →</a></div></div>`;
+}
+
 function vSummary(c,audits){
   const sts=c.creators.map(x=>cstat(c,x).k), cnt=k=>sts.filter(s=>s===k).length;
   let h='<div class="kpis">'+kpi(c.creators.length,'Active creators')+kpi(cnt('posting'),'Posting','grn')+kpi(cnt('warming'),'Warming up','blu')+kpi(cnt('firstpost'),'First post due (day 3–5)','blu')+kpi(cnt('notstarted'),'No first post past day 5',cnt('notstarted')?'red':'')+kpi(c.unanswered.filter(u=>u.waitingMin>=900).length,'Waiting over 15h',c.unanswered.some(u=>u.waitingMin>=900)?'red':'')+'</div>';
   h+=`<div class="bar" style="margin-top:22px"><h2 style="margin:0">Coach checks <span class="sub">UGC Coach SOP and strike rules</span></h2><span class="sp"></span>${tfSeg()}</div>
-  <div class="tw"><table><thead><tr><th>Coach</th><th class="n">Creators</th>${CHECKCOLS.map(([k,l],i)=>`<th class="c"${i===8?' style="border-left:1px solid var(--line)"':''}>${l}</th>`).join('')}<th>Strike risk</th><th></th></tr>
-  <tr><th></th><th></th><th class="c faint" colspan="8" style="font-weight:400">${esc((TFS.find(t=>t[0]===TF)||[])[1])}</th><th class="c faint" colspan="3" style="font-weight:400;border-left:1px solid var(--line)">Right now</th><th></th><th></th></tr></thead><tbody>
-  ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k],i)=>{const x=a.all.find(q=>q.k===k);return `<td class="c"${i===8?' style="border-left:1px solid var(--line)"':''} title="${esc(x.label+': '+x.detail)}">${ck(x.state)}<div class="faint" style="font-size:11px;margin-top:2px">${esc(x.v||'')}</div></td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
-  <div class="hint" style="margin-top:8px">Hover a mark for details. Strikes are judged on the 7-day view. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET). Warming-up creators are left out of posting checks.</div>`;
+  <div class="tw"><table><thead><tr><th>Coach</th><th class="n">Creators</th>${CHECKCOLS.map(([k,l],i)=>`<th class="c" ${tipAttr(k)}${i===8?' style="border-left:1px solid var(--line)"':''}>${l}</th>`).join('')}<th>Strike risk</th><th></th></tr>
+  <tr><th></th><th></th><th class="c faint" colspan="8" style="font-weight:400">${esc(tfLabel(TF))}</th><th class="c faint" colspan="3" style="font-weight:400;border-left:1px solid var(--line)">Right now</th><th></th><th></th></tr></thead><tbody>
+  ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k],i)=>{const x=a.all.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,first(a.name))}${i===8?' style="border-left:1px solid var(--line)"':''}>${ck(x.state)}<div class="faint" style="font-size:11px;margin-top:2px">${esc(x.v||'')}</div></td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
+  <div class="hint" style="margin-top:8px">Hover or tap a mark (or a column name) to see what it checks and how it's graded. Strikes are judged on the 7-day and Last week views. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET). Warming-up creators are left out of posting checks.</div>`;
   const flagged=audits.filter(a=>a.bad||a.warn);
-  h+=`<h2>Message these coaches <span class="sub">${flagged.length} · ${esc((TFS.find(t=>t[0]===TF)||[])[1].toLowerCase())}</span></h2>`;
+  h+=`<h2>Message these coaches <span class="sub">${flagged.length} · ${esc(tfLow(TF))}</span></h2>`;
   h+=flagged.length?`<div class="cards">${flagged.map(a=>`<div class="card"><h3>${esc(a.name)}<span class="sp"></span>${a.bad?`<span class="tag red">${a.bad} to fix</span>`:''}${a.warn?`<span class="tag amb">${a.warn} to watch</span>`:''}</h3><textarea id="cm_${esc(c.id+a.name)}" style="min-height:130px">${esc(coachMsg(a))}</textarea><div class="actions"><button class="sm pri" data-copyta="cm_${esc(c.id+a.name)}">Copy message</button><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">See details →</a></div></div>`).join('')}</div>`:'<div class="empty">Nothing to raise with any coach for this timeframe.</div>';
   h+=serverIssues(c);
+  h+=`<h2>How each coach is doing <span class="sub">${esc(tfLow(TF))}</span></h2><div class="sumgrid">${audits.slice().sort((x,y)=>(scoreOf(y).score??-1)-(scoreOf(x).score??-1)).map(a=>coachSummary(c,a)).join('')}</div>`;
   return h;
 }
 function serverIssues(c){
@@ -739,7 +849,7 @@ function vCoach(c,a){
   if(!a)return '<div class="empty">Coach not found.</div>';
   const per=Object.fromEntries(TFS.map(([k])=>[k,audit(c,a.name,k)])), keys=per.today.checks.map(k=>k.k), msg=coachMsg(a);
   let h=`<div class="kpis">${kpi(a.cr.length,'Creators')}${kpi(a.counts.posting||0,'Posting','grn')}${kpi(a.counts.warming||0,'Warming up','blu')}${kpi(a.un.length,'Waiting on a reply now',a.un.length?'amb':'')}${kpi(a.cs.medianResponseMin!=null?wait(a.cs.medianResponseMin):'—','Median response, 7d',a.cs.medianResponseMin>300?'red':'')}${kpi(per['7d'].strikes.length+a.now.filter(k=>k.strike).length,'Strike risks this week',per['7d'].strikes.length?'amb':'')}</div>`;
-  h+=`<h2>Performance by timeframe</h2><div class="tw"><table><thead><tr><th>Metric</th>${TFS.map(([k,l])=>`<th class="c">${l}</th>`).join('')}</tr></thead><tbody>${keys.map(k=>`<tr><td style="white-space:normal;min-width:170px">${esc(MLABEL[k])}</td>${TFS.map(([t])=>{const x=per[t].checks.find(q=>q.k===k);return `<td class="c" title="${esc(x.detail)}"><span style="display:inline-flex;gap:8px;align-items:center">${ck(x.state)}<span class="${x.state==='bad'?'red':x.state==='warn'?'amb':'mute'}" style="min-width:58px;text-align:left;font-size:12.5px">${esc(x.v||'')}</span></span></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+  h+=`<h2>Performance by timeframe</h2><div class="tw"><table><thead><tr><th>Metric</th>${TFS.map(([k,l])=>`<th class="c">${esc(k==='custom'?tfLabel('custom'):l)}</th>`).join('')}</tr></thead><tbody>${keys.map(k=>`<tr><td style="white-space:normal;min-width:170px" ${tipAttr(k)}>${esc(MLABEL[k])}</td>${TFS.map(([t])=>{const x=per[t].checks.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,tfLabel(t))}><span style="display:inline-flex;gap:8px;align-items:center">${ck(x.state)}<span class="${x.state==='bad'?'red':x.state==='warn'?'amb':'mute'}" style="min-width:58px;text-align:left;font-size:12.5px">${esc(x.v||'')}</span></span></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
   h+=`<h2>Right now</h2><div class="card checklist">${a.now.map(k=>checkRow(k)).join('')}</div>`;
   h+=`<div class="bar" style="margin-top:28px"><h2 style="margin:0">Details</h2><span class="sp"></span>${tfSeg()}</div><div class="card checklist">${a.checks.map(k=>checkRow(k)).join('')}</div>`;
   if(msg)h+=`<h2>Message to ${esc(first(a.name))} <span class="sub">${esc(a.tfLabel.toLowerCase())}</span></h2><div class="card"><textarea id="cm_one" style="min-height:140px">${esc(msg)}</textarea><div class="actions"><button class="pri sm" data-copyta="cm_one">Copy message</button><span class="hint">Send it in their channel in the Launchpoint Coaches Discord</span></div></div>`;
@@ -924,7 +1034,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
@@ -939,6 +1049,7 @@ document.addEventListener('click',async e=>{
     try{const r=await fetch('api/actions/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:d.clearq,campaign:d.camp||null})}),j=await r.json();if(!r.ok)throw new Error(j.error);
       toast(sc?(j.cancelled?`Cancelled ${plural(j.cancelled,'waiting scan')}`:'No scans were waiting'):`Queue cleared · ${j.cancelled} cancelled, ${j.removed} removed`);if(sc)$('#menu').classList.remove('on');await load()}catch(e){toast('Failed: '+e.message)}}
   else if(d.rcamp){RCAMP=d.rcamp;render()}
+  else if(d.runaudit){if(await act([{type:'audit'}])){toast(live?'Audit queued · the Mac Mini writes it once it is free (a few minutes)':'Audit queued (preview)');render()}}
   else if(d.cof){COF=d.cof;render()}
   else if(d.rank){OPENR.has(d.rank)?OPENR.delete(d.rank):OPENR.add(d.rank);render()}
   else if(d.sendcoach){const it=(S.coachItems||[]).find(x=>x.id===d.sendcoach),ta=$('#d_'+CSS.escape(d.sendcoach)),text=ta?ta.value:'';
@@ -966,6 +1077,7 @@ document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset||{};
   if(t.id==='mm_tpl')$('#mm_text').value=TEMPLATES[t.value].text;
   else if(t.id==='sortsel'){SORT=t.value;render()}
+  else if(t.id==='cust_from'||t.id==='cust_to'){if(t.value){CUST[t.id==='cust_from'?'from':'to']=t.value;render()}}
   else if(d.all)document.querySelectorAll('.pick_'+d.all).forEach(i=>i.checked=t.checked);
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
 });
