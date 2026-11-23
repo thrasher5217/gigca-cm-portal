@@ -9,7 +9,7 @@ RULES
 INPUT
 Read the JSON file named on the last line (INPUT_FILE=...). It covers one period for every campaign: period.label, from period.from to period.to (Chicago dates). Usually that is last calendar week (Monday to Sunday); Ty can also ask for the last 7 days or custom dates. Write about that period, and call it by its label ("last week", "the last 7 days", or the dates).
 - totals: campaign totals for the period from LaunchPoint. For last week they include the week before (prevViews, prevPosts, prevCpm), creators posting and the top videos; for other periods, totals.note says what is missing. null means LaunchPoint has no data for that campaign yet.
-- coaches: per coach for the period: replies, median reply time in minutes, replies over 15h, acknowledgments that needed no reply, check-ins hit out of checkinsPossible (3 a day for each whole day: start 5am-noon, mid noon-5pm, end 5-10pm ET), creators waiting on them now, and their creators' posts and views in the period.
+- coaches: per coach for the period: replies, median reply time in minutes, replies over 15h, acknowledgments that needed no reply, check-ins hit out of checkinsPossible (3 a day for each whole day: start 5am-noon, mid noon-5pm, end 5-10pm ET; only the coach's own messages count), creators waiting on them now, and their creators' posts and views in the period.
 - creators: per creator: coach, days on the campaign, posts/views/CPM in the period (null when not available for that period), the last 7 days of posts (oldest first, today last), 7-day and all-time CPM.
 - waitingOldest: the creators who have waited longest for a coach reply right now.
 

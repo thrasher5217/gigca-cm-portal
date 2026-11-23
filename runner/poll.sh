@@ -39,6 +39,13 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK"' EXIT
 
+# Pick up portal updates every 10 minutes, not only when a scan starts (so changes like the Chrome status reach this Mac soon).
+STAMP="$CONF/last-pull"
+if [[ -z "$(find "$STAMP" -mmin -10 2>/dev/null)" ]]; then
+  git -C "$DIR" pull --ff-only -q >/dev/null 2>&1 || log "git pull failed; using the scripts already here"
+  touch "$STAMP"
+fi
+
 # Tell the portal whether Chrome is open (scans need it), so it can warn on the sidebar.
 pgrep -x "Google Chrome" >/dev/null 2>&1 && chrome=true || chrome=false
 resp=$(curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \

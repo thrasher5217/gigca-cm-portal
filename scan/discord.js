@@ -21,6 +21,10 @@
     }
     throw new Error('server not found in the Discord server list (is it inside a closed folder?)');
   }
+  // Discord display names that don't start with the coach's first name (check-ins only count the coach's own messages)
+  const ALIAS = { 'Mathew Wu': ['matwu'], 'Baraa Alrash': ['baroobi'], 'Ty McGuire': ['Ty M', 'tym0559'] };
+  const isCoach = (coach, a) => { a = String(a || '').toLowerCase(); const f = String(coach || '').split(' ')[0].toLowerCase();
+    return !!a && ((f.length > 1 && (a === f || a.startsWith(f + ' ') || a === String(coach).toLowerCase())) || (ALIAS[coach] || []).some(x => a === x.toLowerCase() || a.startsWith(x.toLowerCase()))); };
   const COACH = { 'Ty': 'Ty McGuire', 'Amrin': 'Amrin Jahan', 'Dakota': 'Dakota Crane', 'Team Aristotle': 'Joseph Ferrall', 'Team Da Vinci': 'Razeen Khan',
     'Team Van Gogh': 'Ryan Soto', 'Mat': 'Mathew Wu', 'Eric': 'Eric Liang', 'Grace': 'Grace Goldstein', 'Anna': 'Anna Florek', 'Baraa': 'Baraa Alrash' };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -111,12 +115,13 @@
   function analyze(chans, staffRe, opt) {
     opt = opt || {};
     const seenIn = {}; chans.forEach(c => new Set(c.msgs.filter(m => !isBot(m)).map(m => clean(m.a))).forEach(a => seenIn[a] = (seenIn[a] || 0) + 1));
-    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], tagged = [], channels = {}, rt = {}, wins = {}, resp = {}, acks = {};
+    const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], tagged = [], channels = {}, rt = {}, wins = {}, winsBy = {}, posts = {}, resp = {}, acks = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
       const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, r: m.r, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; L.ms.push(m); } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id, ms: [m] }); }
-      hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t); if (w) (wins[coach] = wins[coach] || new Set()).add(w); } });
+      // check-in windows per staff author; only the coach's own messages count (decided after all channels are read)
+      hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t), by = (winsBy[coach] = winsBy[coach] || {}); posts[coach] = posts[coach] || {}; posts[coach][m.a] = (posts[coach][m.a] || 0) + 1; if (w) (by[m.a] = by[m.a] || new Set()).add(w); } });
       // Someone wrote @Ty in this channel since Ty last spoke or reacted here: it's waiting on Ty himself, whoever the coach is.
       let lastTyI = -1; hs.forEach((m, i) => { if (isTyName(m.a) || m.me) lastTyI = i; });
       const tagI = hs.findIndex((m, i) => i > lastTyI && !isTyName(m.a) && /@Ty\b|@tym0559/i.test(m.x) && now - m.t < 7 * 864e5);
@@ -146,6 +151,12 @@
     // resp = every creator message -> next staff reply in the last 31 days, as [minute timestamp, minutes to reply], for any timeframe
     Object.keys(resp).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).resp = resp[k].sort((a, b) => a[0] - b[0]).slice(-3000));
     Object.keys(acks).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).acks = acks[k].slice(-3000));
+    // The coach's own Discord name(s): matched by name or alias; if none match, the staff member posting most in that category.
+    const checkinBy = {};
+    Object.keys(winsBy).forEach(k => { const authors = Object.keys(posts[k] || {}); let who = authors.filter(a => isCoach(k, a));
+      if (!who.length) { const top = authors.filter(a => !isTyName(a) || isCoach(k, 'Ty')).sort((a, b) => posts[k][b] - posts[k][a])[0]; who = top ? [top] : []; }
+      checkinBy[k] = who; wins[k] = new Set(who.flatMap(a => [...(winsBy[k][a] || [])])); });
+    Object.keys(checkinBy).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkinBy = checkinBy[k]);
     Object.keys(wins).forEach(k => (coachStats[k] = coachStats[k] || { medianResponseMin: null, replies7d: 0, over15h7d: 0 }).checkins = [...wins[k]].sort());
     return { coachStats, channels, unanswered: un, tagged };
   }
