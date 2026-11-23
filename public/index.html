@@ -173,6 +173,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 .mi{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:9px;cursor:pointer}
 .mi:hover{background:var(--s2)}.mi .ttl{font-weight:600}.mi .d{color:var(--t2);font-size:12px}
 .mi .ic{width:30px;height:30px;border-radius:8px;background:var(--accbg);color:var(--acc);display:grid;place-items:center;flex:none;font-size:14px}
+.mi.small{padding:7px 12px}.mi.small .ttl{font-weight:500;font-size:13px}.mi.small .ic{width:24px;height:24px;font-size:12px;border-radius:7px;background:var(--s3);color:var(--t2)}
 .msec{border-top:1px solid var(--line);margin:6px 0 0;padding:10px 12px 6px}
 .msec .h{font-size:11.5px;color:var(--t3);font-weight:500;margin-bottom:6px;display:flex}
 .cbgrid{display:grid;grid-template-columns:1fr 90px 90px;gap:2px 8px;align-items:center}
@@ -998,7 +999,8 @@ function vAudits(){
 /* ---------- rescan menu ---------- */
 function renderMenu(){
   const hist=history().slice(0,8), keep=new Set([...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part));
-  $('#menu').innerHTML=`<div class="mi" data-rescan="all"><div class="ic">↻</div><div><div class="ttl">Full check</div><div class="d">Every campaign's analytics and Discord, your DMs and Slack · about 15 min</div></div></div>
+  $('#menu').innerHTML=`<div class="mi" data-rescan="all"><div class="ic">↻</div><div><div class="ttl">Full check without audits</div><div class="d">Every campaign's analytics and Discord, the coaches server, your DMs and Slack · about 15 min</div></div></div>
+  <div class="mi small" data-fullaudit="1"><div class="ic">↻</div><div><div class="ttl">Full check with audits</div><div class="d">The same, then last week's campaign audit from the fresh data · about 20 min</div></div></div>
   <div class="msec"><div class="h">Pick what to check</div><div class="cbgrid"><span></span><span class="hd">Messages</span><span class="hd">Analytics</span>
   ${CAMPS.map(k=>`<label>${NAMES[k]}</label><span class="cc"><input type="checkbox" data-part="dc.${k}" ${keep.has('dc.'+k)?'checked':''}></span><span class="cc"><input type="checkbox" data-part="lp.${k}" ${keep.has('lp.'+k)?'checked':''}></span>`).join('')}
   <label><input type="checkbox" data-part="dms" ${keep.has('dms')?'checked':''}> Discord DMs</label><span></span><span></span>
@@ -1075,7 +1077,7 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],[data-fullaudit],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
   if(d.openmenu){e.preventDefault();const m=$('#menu');m.classList.add('on');renderMenu();scrollTo(0,0);return}
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
@@ -1083,6 +1085,7 @@ document.addEventListener('click',async e=>{
     // the campaign audit is its own job: the Mac Mini runs it after the scans, so it's written from the fresh data
     const list=[...(p.length?[{type:'rescan',scope:'parts:'+p.join(',')}]:[]),...(aud?[{type:'audit',range:arangeReq()}]:[])];
     if(await act(list)){toast(aud&&p.length?'Queued · the audit runs right after the scans':aud?'Audit queued · the Mac Mini writes it once it is free':fireMsg());$('#menu').classList.remove('on');render()}}
+  else if(d.fullaudit){if(await act([{type:'rescan',scope:'all'},{type:'audit',range:{kind:'lw'}}])){toast(live?'Queued · full check first, then the audit':'Queued (preview)');$('#menu').classList.remove('on');render()}}
   else if(d.rescan)rescan(d.rescan);
   else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
   else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[]).find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
