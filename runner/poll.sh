@@ -79,7 +79,7 @@ if [[ -n "$aid" ]]; then
   git -C "$DIR" pull --ff-only -q >/dev/null 2>&1 || log "git pull failed; using the scripts already here"
   [[ -x "$CLAUDE" ]] || { afail "Claude Code is not installed on the Mac Mini"; exit 1; }
   IN="$CONF/audit-input.json"; OUTF="$CONF/audit-out.json"; BODY="$CONF/audit-body.json"
-  curl -fsS -m 60 -H "Authorization: Bearer $TOKEN" "$PORTAL/api/runner/audit-input" -o "$IN" || { afail "could not download the audit data"; exit 0; }
+  curl -fsS -m 60 -H "Authorization: Bearer $TOKEN" "$PORTAL/api/runner/audit-input?id=$aid" -o "$IN" || { afail "could not download the audit data"; exit 0; }
   prompt="$(<"$DIR/runner/audit.md")"$'\n\n'"INPUT_FILE=$IN"
   out=$(cd "$DIR" && perl -e 'alarm shift; exec @ARGV' 900 "$CLAUDE" -p "$prompt" --no-session-persistence --add-dir "$CONF" --allowedTools "Read" 2>&1)
   print -r -- "$out" | awk '/^AUDIT_JSON_START$/{f=1;next}/^AUDIT_JSON_END$/{f=0}f' > "$OUTF"

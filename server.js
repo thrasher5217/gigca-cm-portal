@@ -162,33 +162,51 @@ function lastWeek(now = Date.now()) {
   return { from, to: end, t0: chiMidnight(from), t1: chiMidnight(addDay(end, 1)) };
 }
 const med = a => { a = a.slice().sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : null; };
+// The audit period: last week (default), the last 7 days, or custom dates (within the last 31 days, Chicago dates).
+function auditPeriod(r) {
+  const now = Date.now(), today = chiDate(now), kind = r && ['7d', 'custom'].includes(r.kind) ? r.kind : 'lw', ok = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
+  if (kind === '7d') return { kind, from: chiDate(now - 7 * 864e5), to: today, t0: now - 7 * 864e5, t1: now, label: 'Last 7 days' };
+  if (kind === 'custom' && ok(r.from) && ok(r.to)) {
+    let [from, to] = r.from <= r.to ? [r.from, r.to] : [r.to, r.from]; if (from < addDay(today, -31)) from = addDay(today, -31); if (to > today) to = today;
+    return { kind, from, to, t0: chiMidnight(from), t1: Math.min(now, chiMidnight(addDay(to, 1))), label: `${from} to ${to}` };
+  }
+  const w = lastWeek(now); return { kind: 'lw', ...w, label: 'Last week' };
+}
+const cleanRange = r => { const p = auditPeriod(r); return p.kind === 'custom' ? { kind: 'custom', from: p.from, to: p.to } : { kind: p.kind }; };
 // What the audit writer reads: one compact block per campaign, last week's numbers and coach stats.
-function auditDigest() {
-  const st = readJson(STATE, { campaigns: [] }), w = lastWeek(), m0 = w.t0 / 6e4, m1 = w.t1 / 6e4, days = Array.from({ length: 7 }, (_, i) => addDay(w.from, i));
-  return { week: { from: w.from, to: w.to }, generatedAt: new Date().toISOString(), campaigns: (st.campaigns || []).map(c => {
+function auditDigest(range) {
+  const st = readJson(STATE, { campaigns: [] }), w = auditPeriod(range), m0 = w.t0 / 6e4, m1 = w.t1 / 6e4, today = chiDate(Date.now());
+  const days = []; for (let d = w.from; d <= w.to && d < today; d = addDay(d, 1)) days.push(d); // whole days only, for check-ins and daily posts
+  // Per-creator numbers for the period: last week and the last 7 days come straight from LaunchPoint; custom dates add up the 30-day daily posts.
+  const inP = (c, x) => { if (w.kind === 'lw') return x.rng && x.rng.w ? { posts: x.rng.w.posts, views: x.rng.w.v, cpm: x.rng.w.cpm } : { posts: null, views: null, cpm: null };
+    if (w.kind === '7d') return { posts: x.posts7d ?? null, views: x.views7d ?? null, cpm: x.cpm ?? null };
+    const d = x.d30, ds = c.days30 && d && c.days30.length === d.length ? c.days30 : null; return { posts: ds ? d.reduce((a, n, i) => a + (days.includes(ds[i]) ? n || 0 : 0), 0) : null, views: null, cpm: null }; };
+  return { period: { kind: w.kind, label: w.label, from: w.from, to: w.to }, week: { from: w.from, to: w.to }, generatedAt: new Date().toISOString(), campaigns: (st.campaigns || []).map(c => {
     const chans = (c.discord || {}).channels || {}, stats = (c.discord || {}).coachStats || {}, coachOf = x => (chans[x.channelId] || {}).coach || 'Unassigned';
     const names = [...new Set([...Object.keys(stats), ...Object.values(chans).filter(v => !v.general).map(v => v.coach)])].filter(n => n && n !== 'Unassigned');
     const un = c.unanswered || [], cr = c.creators || [];
     return { id: c.id, name: c.name || c.id, yourRole: MINE.includes(c.id) ? 'Ty coaches these creators himself' : 'Ty oversees the coaches (Giga CM)', targetCpm: c.targetCpm || 4,
-      lastWeek: c.lastWeek || null, cpm7d: c.cpm ?? null, cpmAllTime: c.cpmAllTime ?? null, analyticsScannedAt: c.scannedAt || null, discordScannedAt: c.discordScannedAt || null,
+      totals: w.kind === 'lw' ? (c.lastWeek || null) : w.kind === '7d' ? { views: c.views7d ?? null, posts: (c.postsByDay || []).reduce((a, d) => a + (d.posts || 0), 0) || null, cpm: c.cpm ?? null, note: 'last 7 days; no comparison week' }
+        : { posts: (c.creators || []).reduce((a, x) => a + (inP(c, x).posts || 0), 0) || null, views: null, cpm: null, note: 'custom dates: LaunchPoint views and CPM are not collected for custom ranges' },
+      cpm7d: c.cpm ?? null, cpmAllTime: c.cpmAllTime ?? null, analyticsScannedAt: c.scannedAt || null, discordScannedAt: c.discordScannedAt || null,
       coaches: names.map(n => { const cs = stats[n] || {}, r = (cs.resp || []).filter(e => e[0] >= m0 && e[0] < m1).map(e => e[1]), ck = new Set(cs.checkins || []);
         const mine = cr.filter(x => coachOf(x) === n), wait = un.filter(u => u.coach === n);
         return { name: n, creators: mine.length || Object.values(chans).filter(v => v.coach === n && !v.general).length, repliesLastWeek: r.length, medianReplyMinutes: med(r), repliesOver15h: r.filter(x => x > 900).length,
-          acknowledgmentsNeedingNoReply: (cs.acks || []).filter(x => x >= m0 && x < m1).length, checkinsHit: days.reduce((a, d) => a + ['a', 'b', 'c'].filter(k => ck.has(d + ':' + k)).length, 0), checkinsPossible: 21,
+          acknowledgmentsNeedingNoReply: (cs.acks || []).filter(x => x >= m0 && x < m1).length, checkinsHit: days.reduce((a, d) => a + ['a', 'b', 'c'].filter(k => ck.has(d + ':' + k)).length, 0),
           waitingNow: wait.length, waitingOver15hNow: wait.filter(u => u.waitingMin >= 900).length,
-          postsLastWeek: mine.reduce((a, x) => a + ((x.rng && x.rng.w && x.rng.w.posts) || 0), 0), viewsLastWeek: mine.reduce((a, x) => a + ((x.rng && x.rng.w && x.rng.w.v) || 0), 0) }; }),
+          checkinsPossible: days.length * 3, postsInPeriod: mine.reduce((a, x) => a + (inP(c, x).posts || 0), 0), viewsInPeriod: w.kind === 'custom' ? null : mine.reduce((a, x) => a + (inP(c, x).views || 0), 0) }; }),
       creators: cr.slice(0, 200).map(x => ({ name: x.name, coach: coachOf(x), daysOnCampaign: x.daysOnCampaign, everPosted: x.everPosted, lastPostAt: x.lastPostAt, expectedPerDay: x.expectedPerDay,
-        postsLastWeek: x.rng && x.rng.w ? x.rng.w.posts : null, viewsLastWeek: x.rng && x.rng.w ? x.rng.w.v : null, cpmLastWeek: x.rng && x.rng.w ? x.rng.w.cpm : null,
+        postsInPeriod: inP(c, x).posts, viewsInPeriod: inP(c, x).views, cpmInPeriod: inP(c, x).cpm,
         posts7d: x.posts7d, last7Days: x.daily, cpm7d: x.cpm, cpmAllTime: x.cpmAllTime, inDiscord: x.inDiscord })),
       waitingOldest: un.slice().sort((a, b) => b.waitingMin - a.waitingMin).slice(0, 15).map(u => ({ channel: u.channel, coach: u.coach, hoursWaiting: Math.round(u.waitingMin / 60), message: String(u.message || '').slice(0, 160) })) };
   }) };
 }
-app.get('/api/runner/audit-input', runnerAuth, (req, res) => res.json(auditDigest()));
+app.get('/api/runner/audit-input', runnerAuth, (req, res) => { const a = getQueue().find(x => x.id === req.query.id && x.type === 'audit'); res.json(auditDigest(a && a.range)); });
 app.post('/api/runner/audit', runnerAuth, (req, res) => {
   const b = req.body || {}, q = getQueue(), a = q.find(x => x.id === b.id && x.type === 'audit'), now = new Date().toISOString();
   if (!b.audits || typeof b.audits !== 'object' || Array.isArray(b.audits)) return res.status(400).json({ error: 'audits must be an object keyed by campaign id' });
-  const cur = readJson(AUDITS, {}), w = lastWeek(), clip = (v, n) => typeof v === 'string' ? v.slice(0, n) : Array.isArray(v) ? v.slice(0, 30).map(x => clip(x, n)) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).slice(0, 30).map(([k, x]) => [k, clip(x, n)])) : v;
-  let n = 0; for (const [cid, au] of Object.entries(b.audits)) if (CAMPS.includes(cid) && au && typeof au === 'object') { cur[cid] = { ...clip(au, 1500), week: `${w.from} to ${w.to}`, generatedAt: now }; n++; }
+  const cur = readJson(AUDITS, {}), w = auditPeriod(a && a.range), clip = (v, n) => typeof v === 'string' ? v.slice(0, n) : Array.isArray(v) ? v.slice(0, 30).map(x => clip(x, n)) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).slice(0, 30).map(([k, x]) => [k, clip(x, n)])) : v;
+  let n = 0; for (const [cid, au] of Object.entries(b.audits)) if (CAMPS.includes(cid) && au && typeof au === 'object') { cur[cid] = { ...clip(au, 1500), week: `${w.from} to ${w.to}`, period: { kind: w.kind, from: w.from, to: w.to }, generatedAt: now }; n++; }
   writeJson(AUDITS, cur);
   if (a) { a.status = n ? 'done' : 'failed'; a.finishedAt = now; a.detail = n ? `${n} campaigns` : 'no campaigns in the audit'; writeJson(QUEUE, q); }
   if (n) { const rn = readJson(RUNNER, {}); rn.lastAuditAt = now; writeJson(RUNNER, rn); }
@@ -263,11 +281,12 @@ app.post('/api/actions', async (req, res) => {
     if (live && String(a.text).length > 2000) return res.status(400).json({ error: 'Discord messages are limited to 2000 characters' });
     out.push({ id: crypto.randomUUID(), type: a.type, campaign: a.campaign || null, creator: a.creator || null,
       channel: a.channel || null, channelId: a.channelId || null, guildId: live ? String(a.guildId) : null, live: live || undefined,
-      text: a.text || null, scope: a.scope || null, status: 'pending', createdAt: new Date().toISOString() });
+      text: a.text || null, scope: a.scope || null, ...(a.type === 'audit' ? { range: cleanRange(a.range) } : {}), status: 'pending', createdAt: new Date().toISOString() });
   }
   // Rescans wait in the queue until the Mac Mini claims them (it asks every 30s). Only fixed scope formats are accepted,
   // and a scope that is already waiting is not queued twice.
   out.forEach(a => { if (a.type === 'rescan' && SCOPE_OK.test(String(a.scope || 'all'))) a.scope = normScope(String(a.scope || 'all')); });
+  out.forEach(a => { const w = a.type === 'audit' && q.find(x => x.type === 'audit' && x.status === 'pending'); if (w) w.range = a.range; }); // a waiting audit takes the newest period asked for
   const keep = out.filter(a => a.type === 'audit' ? !q.some(x => x.type === 'audit' && (x.status === 'pending' || x.status === 'running')) : a.type !== 'rescan' || (SCOPE_OK.test(a.scope || 'all') && !q.some(x => x.type === 'rescan' && x.status === 'pending' && x.scope === (a.scope || 'all'))));
   keep.forEach(a => { if (a.type === 'rescan') a.scope = a.scope || 'all'; });
   writeJson(QUEUE, q.concat(keep));

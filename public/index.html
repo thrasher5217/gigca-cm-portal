@@ -155,7 +155,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 .rhead{display:grid;grid-template-columns:30px minmax(0,1fr) auto 18px;gap:12px;align-items:center;padding:12px 16px;cursor:pointer;user-select:none}
 .rhead:hover{background:var(--s2)}
 .rk{width:26px;height:26px;border-radius:50%;background:var(--s3);color:var(--t2);display:grid;place-items:center;font-weight:600;font-size:12px;font-variant-numeric:tabular-nums}
-.rk.top{background:var(--accbg);color:var(--acc)}
+.rk.lead{background:var(--accbg);color:var(--acc)}
 .rname{font-weight:600;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}.rname span{font-weight:400;color:var(--t3);font-size:12px}
 .rbar{display:flex;align-items:center;gap:8px;margin-top:5px}.rbar .tr{flex:1;max-width:240px;height:6px;border-radius:4px;background:var(--s3);overflow:hidden}.rbar .tr i{display:block;height:100%;border-radius:4px}
 .rbar b{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;min-width:34px}.rbar .faint{font-size:12px}
@@ -313,7 +313,7 @@ const camp=id=>S.campaigns.find(c=>c.id===id);
 const snow=id=>/^\d{15,22}$/.test(String(id||''))?Number(BigInt(id)>>22n)+1420070400000:null; // Discord id -> creation time
 const isTy=n=>/^Ty\b/.test(n||'');
 const first=n=>String(n||'').split(' ')[0];
-const plural=(n,w)=>n+' '+(n===1?w:/[^aeiou]y$/.test(w)?w.slice(0,-1)+'ies':w+'s');
+const plural=(n,w)=>n+' '+(n===1?w:/[^aeiou]y$/.test(w)?w.slice(0,-1)+'ies':/(ch|sh|s|x)$/.test(w)?w+'es':w+'s');
 const AVC=['#7c83ff','#c084fc','#f472b6','#fb923c','#34d399','#38bdf8','#facc15','#a3e635'];
 const av=n=>{let h=0;for(const ch of String(n||'?'))h=(h*31+ch.charCodeAt(0))>>>0;return `<div class="av" style="background:${AVC[h%AVC.length]}">${esc((String(n||'?').match(/\p{L}|\d/u)||['?'])[0].toUpperCase())}</div>`};
 const msgUrl=(c,u)=>{const g=(c&&(c.guildId||GUILD[c.id]));if(!g||!/^\d+$/.test(String(u.channelId||'')))return null;return 'https://discord.com/channels/'+g+'/'+u.channelId+(/^\d+$/.test(String(u.messageId||''))?'/'+u.messageId:'')};
@@ -383,14 +383,14 @@ const dayStart=d=>chiMid(Date.parse(d+'T12:00:00Z')+6*H); // Chicago midnight st
 // Custom range (Chicago dates, inclusive). LaunchPoint day-by-day data covers the last 30 days.
 let CUST={from:addDay(chiDate(Date.now()),-13),to:addDay(chiDate(Date.now()),-1)};
 const lastWeek=(now=Date.now())=>{const today=chiDate(now),end=addDay(today,-(((new Date(today+'T12:00:00Z').getUTCDay()+6)%7)+1));return {from:addDay(end,-6),to:end}};
-const tfLow=tf=>{const l=tfLabel(tf);return tf==='custom'?l:l[0].toLowerCase()+l.slice(1)}; // lower-cases the first letter only, not month names
+const tfLow=tf=>{const l=tfLabel(tf);return tf==='custom'||String(tf).startsWith('r:')?l:l[0].toLowerCase()+l.slice(1)}; // lower-cases the first letter only, not month names
 const fmtD=d=>new Date(d+'T12:00:00Z').toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'});
-const tfLabel=tf=>tf==='lw'?(()=>{const w=lastWeek();return `Last week (${fmtD(w.from)}–${fmtD(w.to)})`})():tf==='custom'?`${fmtD(CUST.from)}–${fmtD(CUST.to)}`:(TFS.find(t=>t[0]===tf)||[])[1];
+const tfLabel=tf=>String(tf).startsWith('r:')?(()=>{const [,a,b]=tf.split(':');return `${fmtD(a)}–${fmtD(b)}`})():tf==='lw'?(()=>{const w=lastWeek();return `Last week (${fmtD(w.from)}–${fmtD(w.to)})`})():tf==='custom'?`${fmtD(CUST.from)}–${fmtD(CUST.to)}`:(TFS.find(t=>t[0]===tf)||[])[1];
 // Posts per day for the last 30 days as [{date,n}], from LaunchPoint (null when the scan hasn't collected it yet).
 const days30=(c,x)=>{const d=x.d30;if(!d)return null;const ds=c.days30&&c.days30.length===d.length?c.days30:d.map((_,i)=>addDay(chiDate(Date.now()),i-(d.length-1)));return d.map((n,i)=>({date:ds[i],n:n||0}))};
 let TF='today';
 const chiMid=t=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t)).map(x=>[x.type,x.value]));return t-((+p.hour*60+ +p.minute)*60+ +p.second)*1000-new Date(t).getMilliseconds()};
-function tfWin(tf,now=Date.now()){const m=chiMid(now);if(tf==='lw'){const w=lastWeek(now);return [dayStart(w.from),dayStart(addDay(w.to,1))]}if(tf==='custom'){const a=CUST.from<=CUST.to?CUST:{from:CUST.to,to:CUST.from};return [dayStart(a.from),Math.min(now,dayStart(addDay(a.to,1)))]}return tf==='today'?[m,now]:tf==='yday'?[m-DAY,m]:tf==='7d'?[now-7*DAY,now]:[now-30*DAY,now]}
+function tfWin(tf,now=Date.now()){const m=chiMid(now);if(String(tf).startsWith('r:')){const [,a,b]=tf.split(':');return [dayStart(a),Math.min(now,dayStart(addDay(b,1)))]}if(tf==='lw'){const w=lastWeek(now);return [dayStart(w.from),dayStart(addDay(w.to,1))]}if(tf==='custom'){const a=CUST.from<=CUST.to?CUST:{from:CUST.to,to:CUST.from};return [dayStart(a.from),Math.min(now,dayStart(addDay(a.to,1)))]}return tf==='today'?[m,now]:tf==='yday'?[m-DAY,m]:tf==='7d'?[now-7*DAY,now]:[now-30*DAY,now]}
 // What the response numbers leave out or time at the Mark read click, for one window.
 const leftOut=(cs,t0,t1)=>{const inW=a=>(a||[]).filter(m=>m*6e4>=t0&&m*6e4<t1).length,a=inW(cs.acks),m=inW(cs.marked);
   return (a?` · ${plural(a,'acknowledgment')} (ok, thanks…) needed no reply`:'')+(m?` · ${m} timed at your Mark read click`:'')};
@@ -405,7 +405,7 @@ function audit(c,name,tf=TF){
   const un=c.unanswered.filter(u=>(u.coach||'Unassigned')===name).sort((a,b)=>b.waitingMin-a.waitingMin);
   const cs=((c.discord||{}).coachStats||{})[name]||{}, chans=(c.discord||{}).channels||{}, mine=Object.entries(chans).filter(([id,v])=>v.coach===name&&!v.general), crCh=new Set(cr.map(r=>r.x.channelId).filter(Boolean));
   const checks=[], add=o=>checks.push({items:[],...o}), nm=r=>r.x.channel||r.x.name, scanned=c.discordScannedAt||S.sample, scanAt=+new Date(c.discordScannedAt||now);
-  const active=cr.filter(r=>r.s.k==='posting'||r.s.k==='idle'), TFL=tfLabel(tf), WK=tf==='7d'||tf==='lw', RANGE=tf==='lw'||tf==='custom'||tf==='30d';
+  const active=cr.filter(r=>r.s.k==='posting'||r.s.k==='idle'), TFL=tfLabel(tf), WK=tf==='7d'||tf==='lw', CUSTR=tf==='custom'||String(tf).startsWith('r:'), RANGE=tf==='lw'||tf==='30d'||CUSTR;
   const inWin=d=>{const t=dayStart(d)+12*H;return t>=t0&&t<t1&&d<chiDate(now)}; // whole days only: today is still in progress
   // history coverage: the scan reads the latest messages in each channel, so long windows may not be fully loaded
   const covered=mine.filter(([id,v])=>(v.msgs||0)<45||(v.oldestMsgAt&&+new Date(v.oldestMsgAt)<=t0)||(snow(id)||0)>=t0).length, cov=mine.length?covered/mine.length:1;
@@ -463,7 +463,7 @@ function audit(c,name,tf=TF){
   // 8. group CPM
   const tgt=c.targetCpm||4, src=tf==='today'?'t':tf==='yday'?'y':tf==='30d'?'m':tf==='lw'?'w':null;
   const g=groupCpm(cr.map(r=>src?(r.x.rng&&r.x.rng[src]?[r.x.rng[src].cpm,r.x.rng[src].v]:[null,0]):[r.x.cpm,r.x.views7d]));
-  if(tf==='custom')add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:'na',v:'n/a',detail:"LaunchPoint CPM isn't collected for custom dates. Use 7 days, Last week or 30 days for CPM."});
+  if(CUSTR)add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:'na',v:'n/a',detail:"LaunchPoint CPM isn't collected for custom dates. Use 7 days, Last week or 30 days for CPM."});
   else add({k:'cpm',label:`Coach group CPM under ${money(tgt)}`,state:g==null?'na':g<=tgt?'ok':'warn',v:g==null?(src&&!cr.some(r=>r.x.rng)?'next scan':'no views'):money(g),detail:g==null?(src&&!cr.some(r=>r.x.rng)?'Per-timeframe CPM arrives with the next full scan':'No views in this window'):money(g)+(WK&&g<tgt?' · under target, removes a strike':''),bonus:WK&&g!=null&&g<tgt});
   const counts={};cr.forEach(r=>counts[r.s.k]=(counts[r.s.k]||0)+1);
   return {name,tf,tfLabel:TFL,cr,un,cs,checks,counts,strikes:checks.filter(k=>k.strike).map(k=>k.strike),bad:checks.filter(k=>k.state==='bad').length,warn:checks.filter(k=>k.state==='warn').length};
@@ -494,7 +494,7 @@ const LINE={
   cpm:k=>`Group CPM is ${k.v}, over the target`};
 function coachMsg(a){
   const lines=a.all.filter(k=>k.state==='bad'||k.state==='warn').map(k=>'- '+LINE[k.k](k));
-  const when={today:'today so far',yday:'yesterday','7d':'over the last 7 days','30d':'over the last 30 days',lw:'last week',custom:tfLabel('custom')}[a.tf];
+  const when={today:'today so far',yday:'yesterday','7d':'over the last 7 days','30d':'over the last 30 days',lw:'last week',custom:tfLabel('custom')}[a.tf]||tfLabel(a.tf);
   return lines.length?`Hey ${first(a.name)}, quick check on your creators (${when}):\n${lines.join('\n')}\nCan you get these handled today and let me know?`:'';
 }
 const ck=st=>`<span class="ck ${st}" title="${st==='ok'?'On track':st==='bad'?'Needs action':st==='warn'?'Watch':'No data'}">${st==='ok'?'✓':st==='bad'?'✕':st==='warn'?'!':'–'}</span>`;
@@ -648,7 +648,7 @@ function coachRanking(){
 }
 function rankList(rows){
   return `<div class="list">${rows.map((r,i)=>{const {c,a}=r,key=c.id+'|'+a.name,open=OPENR.has(key),col=r.score==null?'var(--t3)':r.score>=85?'var(--grn)':r.score>=60?'var(--amb)':'var(--red)',ns=r.strikes.length,msg=coachMsg(a),fix=a.all.filter(k=>k.state==='bad'),watch=a.all.filter(k=>k.state==='warn');
-    return `<div class="rank ${open?'open':''}"><div class="rhead" data-rank="${esc(key)}"><span class="rk ${i<3&&r.score!=null&&!ns?'top':''}">${i+1}</span>
+    return `<div class="rank ${open?'open':''}"><div class="rhead" data-rank="${esc(key)}"><span class="rk ${i<3&&r.score!=null&&!ns?'lead':''}">${i+1}</span>
       <div style="min-width:0"><div class="rname">${esc(a.name)}<span>${esc(c.name)} · ${plural(a.cr.length,'creator')}</span></div>
       <div class="rbar"><span class="tr"><i style="width:${r.score??0}%;background:${col}"></i></span><b style="color:${col}">${r.score==null?'—':r.score+'%'}</b><span class="faint">${r.graded?`${r.ok}/${r.graded} on track${fix.length?` · <span class="red">${fix.length} to fix</span>`:''}`:'no data yet'}</span></div></div>
       <div title="${esc(r.strikes.join('\n')||'No strike risks this week')}"><div class="pips">${Array.from({length:Math.max(3,ns)},(_,j)=>`<i class="${j<ns?'on':''}"></i>`).join('')}</div><div class="pipl">${ns?ns+' strike risk'+(ns>1?'s':''):'no strikes'}</div></div>
@@ -808,20 +808,31 @@ addEventListener('scroll',hideTip,true);
 // the Mac Mini every 2 days, or on demand.
 const pctCh=(a,b)=>a==null||!b?null:Math.round((a-b)/b*100);
 const chg=(a,b,inv)=>{const p=pctCh(a,b);if(p==null)return '';const good=inv?p<0:p>0;return ` <span class="${p===0?'faint':good?'grn':'red'}" style="font-size:12px">${p>0?'+':''}${p}% vs week before</span>`};
+// Audit period: last week (default), the last 7 days, or custom dates (within LaunchPoint's 30 days)
+let ARANGE={kind:'lw',from:addDay(chiDate(Date.now()),-13),to:addDay(chiDate(Date.now()),-1)};
+const arangePicker=()=>`<span class="custd"><select id="ar_kind">${[['lw','Last week'],['7d','Last 7 days'],['custom','Custom dates']].map(([k,l])=>`<option value="${k}" ${ARANGE.kind===k?'selected':''}>${l}</option>`).join('')}</select>${ARANGE.kind==='custom'?`<input type="date" id="ar_from" value="${ARANGE.from}" min="${addDay(chiDate(Date.now()),-30)}" max="${chiDate(Date.now())}"> to <input type="date" id="ar_to" value="${ARANGE.to}" min="${addDay(chiDate(Date.now()),-30)}" max="${chiDate(Date.now())}">`:''}</span>`;
+const arangeReq=()=>ARANGE.kind==='custom'?{kind:'custom',from:ARANGE.from,to:ARANGE.to}:{kind:ARANGE.kind};
+// which coach-check timeframe and label an audit period maps to
+const perTf=p=>!p||p.kind==='lw'?'lw':p.kind==='7d'?'7d':`r:${p.from}:${p.to}`;
+const perLabel=p=>!p||p.kind==='lw'?tfLabel('lw'):p.kind==='7d'?'Last 7 days':tfLabel(perTf(p));
 function vCampAudit(c){
-  const au=(S.campaignAudits||{})[c.id], lw=c.lastWeek, w=lastWeek(), job=queue().find(a=>a.type==='audit'&&(a.status==='pending'||a.status==='running'));
+  const au=(S.campaignAudits||{})[c.id], per=au&&au.period||{kind:'lw'}, tf=perTf(per), w=lastWeek(), job=queue().find(a=>a.type==='audit'&&(a.status==='pending'||a.status==='running'));
+  const [t0,t1]=tfWin(tf), dsum=x=>{const d=days30(c,x);return d?d.filter(o=>{const t=dayStart(o.date)+12*H;return t>=t0&&t<t1}).reduce((a,o)=>a+o.n,0):null};
+  // numbers for the audit's period: last week and the last 7 days from LaunchPoint; custom dates only have posts (from the 30-day daily data)
+  const lw=per.kind==='lw'?c.lastWeek:per.kind==='7d'?(c.scannedAt?{views:c.views7d,posts:(c.postsByDay||[]).reduce((a,d)=>a+(d.posts||0),0),cpm:c.cpm,creators:c.creators.filter(x=>x.posts7d>0).length,note:'Last 7 days · no comparison week'}:null)
+    :(c.creators.some(x=>x.d30)?{views:null,posts:c.creators.reduce((a,x)=>a+(dsum(x)||0),0),cpm:null,creators:c.creators.filter(x=>dsum(x)>0).length,note:"Custom dates · LaunchPoint views and CPM aren't collected for custom ranges"}:null);
   const last=queue().filter(a=>a.type==='audit').sort((a,b)=>+new Date(b.createdAt)-+new Date(a.createdAt))[0];
   const next=au?new Date(+new Date(au.generatedAt)+48*H):null;
-  let h=`<div class="bar"><span class="hint">Week of ${esc(fmtD(w.from))}–${esc(fmtD(w.to))} · ${au?`written ${ago(au.generatedAt)}${next?` · next update ${next>Date.now()?'in about '+wait(Math.round((next-Date.now())/6e4)):'due'}`:''}`:'not written yet'}${last&&last.status==='failed'&&!job?` · <span class="red">last run failed: ${esc(last.detail||'')}</span>`:''}</span><span class="sp"></span>${job?`<span class="tag acc">${job.status==='running'?'Writing on the Mac Mini…':'Queued for the Mac Mini'}</span>`:`<button class="sm" data-runaudit="1">Run audit now</button>`}</div>`;
-  if(au&&au.week&&au.week!==`${w.from} to ${w.to}`)h+=`<p class="hint">The written audit below is for ${esc(au.week)}; the numbers and coach checks are for last week.</p>`;
+  let h=`<div class="bar"><span class="hint"><b>${esc(perLabel(per))}</b> · ${au?`written ${ago(au.generatedAt)}${next?` · next update ${next>Date.now()?'in about '+wait(Math.round((next-Date.now())/6e4)):'due'}`:''}`:'not written yet'}${last&&last.status==='failed'&&!job?` · <span class="red">last run failed: ${esc(last.detail||'')}</span>`:''}</span><span class="sp"></span>${job?`<span class="tag acc">${job.status==='running'?'Writing on the Mac Mini…':'Queued for the Mac Mini'}${job.range&&job.range.kind!=='lw'?' · '+esc(perLabel(job.range)):''}</span>`:`${arangePicker()}<button class="sm" data-runaudit="1">Run audit now</button>`}</div>`;
+  if(au&&per.kind==='lw'&&au.week&&au.week!==`${w.from} to ${w.to}`)h+=`<p class="hint">This audit was written for ${esc(au.week)}. A new one for last week comes with the next run.</p>`;
   const G={A:'grn',B:'grn',C:'amb',D:'red',F:'red'}[String(au&&au.grade||'').toUpperCase()]||'';
   if(au)h+=`<div class="card" style="margin-bottom:12px"><h3>${au.grade?`<span class="tag ${G}" style="font-size:14px;padding:2px 12px">${esc(au.grade)}</span>`:''}${esc(au.headline||'Campaign audit')}</h3><p style="margin:0;color:var(--text)">${esc(au.summary||'')}</p></div>`;
   else h+=`<div class="empty" style="margin-bottom:12px">The written audit runs every 2 days on the Mac Mini (or press Run audit now). The numbers and coach checks below are live.</div>`;
-  h+=`<h2>Numbers <span class="sub">last week, from LaunchPoint</span></h2>`+(lw?`<div class="kpis">${kpi(fmtN(lw.views||0),'Views'+chg(lw.views,lw.prevViews))}${kpi(lw.posts??'—','Posts'+chg(lw.posts,lw.prevPosts))}${kpi(money(lw.cpm),'CPM (target '+money(c.targetCpm)+')'+chg(lw.cpm,lw.prevCpm,true),lw.cpm==null?'':lw.cpm>c.targetCpm?'red':'grn')}${kpi(lw.creators??'—','Creators posting')}${kpi(money(c.cpmAllTime),'All-time CPM',c.cpmAllTime==null?'':c.cpmAllTime>c.targetCpm?'red':'grn')}</div>`:`<div class="empty">No LaunchPoint numbers for last week yet${c.scannedAt?'':' (no LaunchPoint data for this campaign)'}. They arrive with the next full check.</div>`);
+  h+=`<h2>Numbers <span class="sub">${esc(tfLow(tf==='lw'?'lw':tf))}, from LaunchPoint</span></h2>`+(lw?`${lw.note?`<p class="hint" style="margin-top:-4px">${esc(lw.note)}</p>`:''}<div class="kpis">${kpi(lw.views==null?'—':fmtN(lw.views||0),'Views'+chg(lw.views,lw.prevViews))}${kpi(lw.posts??'—','Posts'+chg(lw.posts,lw.prevPosts))}${kpi(money(lw.cpm),'CPM (target '+money(c.targetCpm)+')'+chg(lw.cpm,lw.prevCpm,true),lw.cpm==null?'':lw.cpm>c.targetCpm?'red':'grn')}${kpi(lw.creators??'—','Creators posting')}${kpi(money(c.cpmAllTime),'All-time CPM',c.cpmAllTime==null?'':c.cpmAllTime>c.targetCpm?'red':'grn')}</div>`:`<div class="empty">No LaunchPoint numbers for this period yet${c.scannedAt?'':' (no LaunchPoint data for this campaign)'}. They arrive with the next full check.</div>`);
   if(au&&au.numbers)h+=`<p class="lede" style="margin-top:10px">${esc(au.numbers)}</p>`;
   if(lw&&lw.top&&lw.top.length)h+=`<h2>Top videos</h2><div class="tw"><table><thead><tr><th>Creator</th><th>Platform</th><th class="n">Views</th><th></th></tr></thead><tbody>${lw.top.map(v=>`<tr><td><b>${esc(v.creator||'')}</b></td><td class="mute">${esc(v.platform||'')}</td><td class="n">${fmtN(v.views||0)}</td><td>${v.url?`<a class="lk" href="${esc(v.url)}" target="_blank" rel="noopener">Watch ↗</a>`:''}</td></tr>`).join('')}</tbody></table></div>`;
-  const rows=c.coachNames.map(n=>{const a=fullAudit(c,n,'lw');return {a,sc:scoreOf(a),note:au&&(au.coaches||[]).find(x=>x.name===n)}}).sort((x,y)=>(y.sc.score??-1)-(x.sc.score??-1));
-  h+=`<h2>Coach performance <span class="sub">last week · hover a mark for how it's graded</span></h2>`+(rows.length?`<div class="list">${rows.map(({a,sc,note})=>{const col=sc.score==null?'var(--t3)':sc.score>=85?'var(--grn)':sc.score>=60?'var(--amb)':'var(--red)';
+  const rows=c.coachNames.map(n=>{const a=fullAudit(c,n,tf);return {a,sc:scoreOf(a),note:au&&(au.coaches||[]).find(x=>x.name===n)}}).sort((x,y)=>(y.sc.score??-1)-(x.sc.score??-1));
+  h+=`<h2>Coach performance <span class="sub">${esc(tfLow(tf))} · hover a mark for how it's graded</span></h2>`+(rows.length?`<div class="list">${rows.map(({a,sc,note})=>{const col=sc.score==null?'var(--t3)':sc.score>=85?'var(--grn)':sc.score>=60?'var(--amb)':'var(--red)';
     return `<div class="item" style="grid-template-columns:32px 1fr">${av(a.name)}<div><div class="ihead"><b>${esc(a.name)}</b><span class="meta">${plural(a.cr.length,'creator')}</span>${note&&note.rating?`<span class="tag ${/strong/i.test(note.rating)?'grn':/on track/i.test(note.rating)?'blu':/attention/i.test(note.rating)?'amb':'red'}">${esc(note.rating)}</span>`:''}<span class="sp"></span><b class="num" style="color:${col}">${sc.score==null?'—':sc.score+'%'}</b></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${a.all.map(k=>`<span class="tag" ${tipAttr(k.k,k,first(a.name))} style="gap:6px">${ck(k.state)}${esc(SHORT[k.k]||k.label)}</span>`).join('')}</div>
     ${note&&note.summary?`<p style="margin:8px 0 0;color:var(--text)">${esc(note.summary)}</p>`:''}${note&&note.fix&&note.fix.length?`<ul style="margin:6px 0 0;padding-left:18px;color:var(--t2)">${note.fix.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`:''}
@@ -992,7 +1003,8 @@ function renderMenu(){
   ${CAMPS.map(k=>`<label>${NAMES[k]}</label><span class="cc"><input type="checkbox" data-part="dc.${k}" ${keep.has('dc.'+k)?'checked':''}></span><span class="cc"><input type="checkbox" data-part="lp.${k}" ${keep.has('lp.'+k)?'checked':''}></span>`).join('')}
   <label><input type="checkbox" data-part="dms" ${keep.has('dms')?'checked':''}> Discord DMs</label><span></span><span></span>
   <label><input type="checkbox" data-part="coaches" ${keep.has('coaches')?'checked':''}> Launchpoint Coaches server</label><span></span><span></span>
-  <label title="The in-depth audit of last week for every campaign. Runs after any scans you tick, so it uses the fresh data."><input type="checkbox" data-part="audit" ${keep.has('audit')?'checked':''}> Campaign audit (last week)</label><span></span><span></span>
+  <label title="The in-depth audit for every campaign. Runs after any scans you tick, so it uses the fresh data."><input type="checkbox" data-part="audit" ${keep.has('audit')?'checked':''}> Campaign audit</label><span></span><span></span>
+  ${keep.has('audit')?`<span style="grid-column:1/-1;padding:2px 0 6px 22px">${arangePicker()}</span>`:''}
   <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
   <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM. The audit also runs by itself every 2 days.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
   ${scans().some(a=>a.status==='pending')?`<div class="msec"><div class="bar" style="margin:0"><span class="hint">${plural(scans().filter(a=>a.status==='pending').length,'scan')} waiting for the Mac Mini</span><span class="sp"></span><button class="sm" data-clearq="scans">Cancel waiting scans</button></div></div>`:''}
@@ -1069,7 +1081,7 @@ document.addEventListener('click',async e=>{
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const all=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part),aud=all.includes('audit'),p=all.filter(x=>x!=='audit');if(!all.length)return toast('Tick at least one box');
     // the campaign audit is its own job: the Mac Mini runs it after the scans, so it's written from the fresh data
-    const list=[...(p.length?[{type:'rescan',scope:'parts:'+p.join(',')}]:[]),...(aud?[{type:'audit'}]:[])];
+    const list=[...(p.length?[{type:'rescan',scope:'parts:'+p.join(',')}]:[]),...(aud?[{type:'audit',range:arangeReq()}]:[])];
     if(await act(list)){toast(aud&&p.length?'Queued · the audit runs right after the scans':aud?'Audit queued · the Mac Mini writes it once it is free':fireMsg());$('#menu').classList.remove('on');render()}}
   else if(d.rescan)rescan(d.rescan);
   else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
@@ -1082,7 +1094,7 @@ document.addEventListener('click',async e=>{
     try{const r=await fetch('api/actions/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:d.clearq,campaign:d.camp||null})}),j=await r.json();if(!r.ok)throw new Error(j.error);
       toast(sc?(j.cancelled?`Cancelled ${plural(j.cancelled,'waiting scan')}`:'No scans were waiting'):`Queue cleared · ${j.cancelled} cancelled, ${j.removed} removed`);if(sc)$('#menu').classList.remove('on');await load()}catch(e){toast('Failed: '+e.message)}}
   else if(d.rcamp){RCAMP=d.rcamp;render()}
-  else if(d.runaudit){if(await act([{type:'audit'}])){toast(live?'Audit queued · the Mac Mini writes it once it is free (a few minutes)':'Audit queued (preview)');render()}}
+  else if(d.runaudit){if(await act([{type:'audit',range:arangeReq()}])){toast(live?'Audit queued · the Mac Mini writes it once it is free (a few minutes)':'Audit queued (preview)');render()}}
   else if(d.cof){COF=d.cof;render()}
   else if(d.rank){OPENR.has(d.rank)?OPENR.delete(d.rank):OPENR.add(d.rank);render()}
   else if(d.sendcoach){const it=(S.coachItems||[]).find(x=>x.id===d.sendcoach),ta=$('#d_'+CSS.escape(d.sendcoach)),text=ta?ta.value:'';
@@ -1110,6 +1122,9 @@ document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset||{};
   if(t.id==='mm_tpl')$('#mm_text').value=TEMPLATES[t.value].text;
   else if(t.id==='sortsel'){SORT=t.value;render()}
+  else if(t.id==='ar_kind'){ARANGE.kind=t.value;if($('#menu').classList.contains('on'))renderMenu();else render()}
+  else if(t.id==='ar_from'||t.id==='ar_to'){if(t.value)ARANGE[t.id==='ar_from'?'from':'to']=t.value}
+  else if(d.part==='audit'){renderMenu()}
   else if(t.id==='cust_from'||t.id==='cust_to'){if(t.value){CUST[t.id==='cust_from'?'from':'to']=t.value;render()}}
   else if(d.all)document.querySelectorAll('.pick_'+d.all).forEach(i=>i.checked=t.checked);
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
