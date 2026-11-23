@@ -82,13 +82,21 @@ aid=$(json_get "$resp" audit.id)
 if [[ -n "$aid" ]]; then
   afail() { local body; body=$(osascript -l JavaScript -e 'function run(a){return JSON.stringify({status:"failed",detail:a[0]})}' "$1")
     curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "$body" "$PORTAL/api/runner/actions/$aid" >/dev/null 2>&1; log "audit failed: $1"; }
-  log "audit start id=$aid"
+  aprog() { curl -fsS -m 15 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{\"phase\":\"$1\"}" "$PORTAL/api/runner/progress/$aid" >/dev/null 2>&1; }
+  log "audit start id=$aid"; aprog started
   git -C "$DIR" pull --ff-only -q >/dev/null 2>&1 || log "git pull failed; using the scripts already here"
   [[ -x "$CLAUDE" ]] || { afail "Claude Code is not installed on the Mac Mini"; exit 1; }
   IN="$CONF/audit-input.json"; OUTF="$CONF/audit-out.json"; BODY="$CONF/audit-body.json"
   curl -fsS -m 60 -H "Authorization: Bearer $TOKEN" "$PORTAL/api/runner/audit-input?id=$aid" -o "$IN" || { afail "could not download the audit data"; exit 0; }
+  aprog downloaded
   prompt="$(<"$DIR/runner/audit.md")"$'\n\n'"INPUT_FILE=$IN"
-  out=$(cd "$DIR" && perl -e 'alarm shift; exec @ARGV' 900 "$CLAUDE" -p "$prompt" --no-session-persistence --add-dir "$CONF" --allowedTools "Read" 2>&1)
+  # Claude writes in the background; a heartbeat every 30s tells the portal it's still alive
+  RAW="$CONF/audit-raw.txt"; aprog writing
+  (cd "$DIR" && perl -e 'alarm shift; exec @ARGV' 900 "$CLAUDE" -p "$prompt" --no-session-persistence --add-dir "$CONF" --allowedTools "Read" > "$RAW" 2>&1) &
+  cpid=$!
+  n=0; while kill -0 $cpid 2>/dev/null; do sleep 5; n=$((n+1)); (( n % 6 == 0 )) && kill -0 $cpid 2>/dev/null && aprog writing; done
+  wait $cpid; out="$(<"$RAW")"
+  aprog uploading
   print -r -- "$out" | awk '/^AUDIT_JSON_START$/{f=1;next}/^AUDIT_JSON_END$/{f=0}f' > "$OUTF"
   if [[ ! -s "$OUTF" ]]; then print -r -- "$out" | tail -20 | sed 's/^/    /' >> "$LOG"; afail "the audit came back empty"; exit 0; fi
   { print -rn -- "{\"id\":\"$aid\",\"audits\":"; cat "$OUTF"; print -rn -- "}"; } > "$BODY"

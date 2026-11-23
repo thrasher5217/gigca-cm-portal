@@ -120,7 +120,7 @@ app.post('/api/runner/finish', runnerAuth, (req, res) => {
 // Scans get 40 minutes, sends 15. A send that times out may still have gone out, so check the channel before retrying.
 setInterval(() => {
   const q = getQueue(), now = Date.now(); let n = 0;
-  q.forEach(a => { const lim = (a.live ? 15 : 40) * 60000; if (a.status === 'running' && a.startedAt && +new Date(a.startedAt) < now - lim) { a.status = 'failed'; a.finishedAt = new Date().toISOString(); a.detail = a.live ? 'no report from the Mac Mini after 15 minutes. Check the channel before sending again' : 'no report from the Mac Mini after 40 minutes'; n++; } });
+  q.forEach(a => { const lim = (a.live ? 15 : a.type === 'audit' ? 25 : 40) * 60000; if (a.status === 'running' && a.startedAt && +new Date(a.startedAt) < now - lim) { a.status = 'failed'; a.finishedAt = new Date().toISOString(); a.detail = a.live ? 'no report from the Mac Mini after 15 minutes. Check the channel before sending again' : a.type === 'audit' ? 'no report from the Mac Mini after 25 minutes (asleep, restarted or offline?)' : 'no report from the Mac Mini after 40 minutes'; n++; } });
   if (n) writeJson(QUEUE, q);
 }, 60000);
 app.post('/api/runner/actions/:id', runnerAuth, (req, res) => {
@@ -201,6 +201,13 @@ function auditDigest(range) {
       waitingOldest: un.slice().sort((a, b) => b.waitingMin - a.waitingMin).slice(0, 15).map(u => ({ channel: u.channel, coach: u.coach, hoursWaiting: Math.round(u.waitingMin / 60), message: String(u.message || '').slice(0, 160) })) };
   }) };
 }
+// The Mac Mini reports where a job is (and a heartbeat every 30s while Claude writes), for the portal's progress panel.
+app.post('/api/runner/progress/:id', runnerAuth, (req, res) => {
+  const q = getQueue(), a = q.find(x => x.id === req.params.id), now = new Date().toISOString(), ph = String((req.body || {}).phase || '').slice(0, 40);
+  if (!a) return res.status(404).json({ error: 'not found' });
+  a.beatAt = now; if (ph) { a.phase = ph; a.steps = a.steps || {}; if (!a.steps[ph]) a.steps[ph] = now; }
+  writeJson(QUEUE, q); res.json({ ok: true, status: a.status });
+});
 app.get('/api/runner/audit-input', runnerAuth, (req, res) => { const a = getQueue().find(x => x.id === req.query.id && x.type === 'audit'); res.json(auditDigest(a && a.range)); });
 app.post('/api/runner/audit', runnerAuth, (req, res) => {
   const b = req.body || {}, q = getQueue(), a = q.find(x => x.id === b.id && x.type === 'audit'), now = new Date().toISOString();
@@ -308,7 +315,8 @@ app.post('/api/actions/clear', (req, res) => {
 });
 app.delete('/api/actions/:id', (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
-  if (!a || a.status !== 'pending') return res.status(409).json({ error: 'not pending' });
+  if (!a || !(a.status === 'pending' || (a.status === 'running' && a.type === 'audit'))) return res.status(409).json({ error: 'not pending' });
+  if (a.status === 'running') { a.detail = 'stopped from the portal'; a.finishedAt = new Date().toISOString(); } // frees the Mac Mini for the next job
   a.status = 'cancelled'; writeJson(QUEUE, q); res.json(a);
 });
 app.use(express.static(path.join(__dirname, 'public')));

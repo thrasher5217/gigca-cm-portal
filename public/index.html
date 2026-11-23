@@ -138,6 +138,18 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 .readsec{margin-top:14px}.readsec .item{opacity:.6}
 .empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
 
+/* job progress panel */
+#jobpanel{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
+#jobpanel.on{display:flex}
+#jobpanel .box{background:var(--s1);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);width:440px;max-width:100%;padding:18px 20px}#jobpanel .box.anim{animation:pop .14s ease-out}
+#jobpanel h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;gap:8px}
+.jsteps{display:flex;flex-direction:column;margin:14px 0 4px}
+.jstep{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:start;padding:7px 0;position:relative}
+.jstep .ck{width:20px;height:20px;font-size:10px}.jstep .lbl{font-weight:500}.jstep .lbl small{display:block;font-weight:400;color:var(--t3);font-size:12px}
+.jstep .tm{color:var(--t3);font-size:12px;white-space:nowrap}
+.ck.now{background:var(--blubg);color:var(--blu);animation:pulse 1.6s ease-in-out infinite}
+.jnote{border-radius:9px;padding:9px 12px;font-size:12.5px;margin-top:10px}.jnote.warn{background:var(--ambbg);color:var(--amb)}.jnote.bad{background:var(--redbg);color:var(--red)}.jnote.info{background:var(--s2);color:var(--t2)}
+
 /* check details on hover */
 #tipbox{position:fixed;z-index:60;max-width:340px;background:var(--s1);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);padding:12px 14px;font-size:12.5px;line-height:1.5;color:var(--t2);display:none;pointer-events:none}
 #tipbox.on{display:block;animation:pop .12s ease-out}
@@ -222,6 +234,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 </main>
 <div id="toast"></div>
 <div id="tipbox" role="tooltip"></div>
+<div id="jobpanel"></div>
 <script>
 /* ---------- constants ---------- */
 const CAMPS=['capcut','artlist','creatify','melius','yri'];
@@ -593,6 +606,33 @@ function lastScans(){
 
 /* ---------- render ---------- */
 function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
+/* ---------- progress panel for a campaign audit (click the sidebar line) ---------- */
+let JOB=null; // id of the job whose panel is open
+const hm=t=>t?new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+function renderJob(){
+  const el=$('#jobpanel');if(!JOB){el.classList.remove('on');return}
+  const a=(S.queue||[]).find(x=>x.id===JOB);if(!a){JOB=null;el.classList.remove('on');return}
+  const st=a.steps||{}, run=a.status==='running', fin=['done','failed','cancelled'].includes(a.status), now=Date.now();
+  const beat=a.beatAt?+new Date(a.beatAt):null, since=t=>wait(Math.max(0,Math.round((now-+new Date(t))/6e4))), mins=a.startedAt?Math.round((now-+new Date(a.startedAt))/6e4):0;
+  const order=['queued','started','downloaded','writing','uploading','end'], reached=k=>k==='queued'||(k==='started'&&a.startedAt)||(k==='end'&&fin)||!!st[k];
+  let cur=fin?'end':order.slice().reverse().find(reached);
+  const S2=[['queued','Queued',a.createdAt,'Waiting for the Mac Mini'],['started','Picked up by the Mac Mini',a.startedAt||st.started,''],['downloaded','Got the data from the portal',st.downloaded,''],
+    ['writing','Claude is writing the audit',st.writing,run&&cur==='writing'?`${since(st.writing)} so far · usually 3 to 10 minutes, stopped at 15`:''],['uploading','Saving the audit',st.uploading,''],
+    ['end',a.status==='done'?'Done · audit saved':a.status==='failed'?'Failed':a.status==='cancelled'?'Stopped':'Done',a.finishedAt,a.status==='done'?'Open any campaign\'s Campaign audit tab':a.detail||'']];
+  const icon=k=>{const i=order.indexOf(k),c=order.indexOf(cur);if(k==='end'&&fin)return a.status==='done'?ck('ok'):ck('bad');if(i<c)return ck('ok');if(i===c&&!fin)return `<span class="ck now">●</span>`;return ck('na')};
+  let note='';
+  if(run&&!a.steps)note=`<div class="jnote info">The Mac Mini's runner doesn't report steps yet (it picks up the update within 10 minutes). Only the elapsed time is known: ${wait(mins)}.</div>`;
+  if(run&&mins>=16)note=`<div class="jnote bad">Past the 15-minute limit, so this run has almost certainly stopped (the Mac Mini may have slept, restarted or lost its connection). It's cleared automatically at 25 minutes, or press Stop now.</div>`;
+  else if(run&&beat&&now-beat>3*60000)note=`<div class="jnote warn">The Mac Mini last reported ${since(a.beatAt)} ago. It normally reports every 30 seconds, so it may have stalled.</div>`;
+  else if(run&&beat)note+=`<div class="jnote info">Last heard from the Mac Mini ${now-beat<60000?'just now':since(a.beatAt)+' ago'} · runs in the background, so nothing shows on its screen.</div>`;
+  const first=!el.classList.contains('on'); // fade in only when it opens, not on every refresh
+  el.innerHTML=`<div class="box${first?' anim':''}" role="dialog" aria-label="Campaign audit progress"><h3>Campaign audit<span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':run?'acc':''}">${run?'Running · '+wait(mins):a.status==='pending'?'Queued':esc(a.status)}</span><span class="sp"></span><button class="sm ghost" data-jobclose="1">✕</button></h3>
+    <div class="hint">${esc(perLabel(a.range))}${a.source==='schedule'?' · automatic (every 2 days)':''}</div>
+    <div class="jsteps">${S2.map(([k,l,t,sub])=>`<div class="jstep">${icon(k)}<div class="lbl">${esc(l)}${sub?`<small>${esc(sub)}</small>`:''}</div><span class="tm">${reached(k)||k==='end'&&fin?hm(t):''}</span></div>`).join('')}</div>
+    ${note}<div class="actions" style="margin-top:14px">${run||a.status==='pending'?`<button class="sm" data-jobstop="${esc(a.id)}">Stop this audit</button>`:''}<span class="sp"></span><button class="sm pri" data-jobclose="1">Close</button></div></div>`;
+  el.classList.add('on');
+}
+
 /* ---------- Mac Mini status: online, Chrome, failures (sidebar bottom; a strip on phones) ---------- */
 function statusLines(){
   if(!live)return [];
@@ -602,11 +642,11 @@ function statusLines(){
   else out.push({k:age>30?'bad':'off',t:'Mac Mini seen '+ago(rn.lastPollAt),s:'Asleep, off, updating, or nobody logged in'});
   // what the Mac Mini is doing right now, and what's waiting
   const run=q.filter(a=>a.status==='running'), mins=a=>Math.max(0,Math.round((Date.now()-+new Date(a.startedAt||a.createdAt))/6e4)), long=(a,lim)=>mins(a)>lim?' · taking longer than usual':'';
-  run.filter(a=>a.type==='audit').forEach(a=>out.push({k:'busy',t:`Writing campaign audit · ${wait(mins(a))}`,s:'In the background on the Mac Mini: no window or tab opens. Usually under 15 min'+long(a,15)}));
+  run.filter(a=>a.type==='audit').forEach(a=>out.push({k:'busy',t:`Writing campaign audit · ${wait(mins(a))}`,s:(mins(a)>=16?'Past the 15-min limit: probably stopped. ':'In the background, no window opens. ')+'Click for progress',job:a.id}));
   run.filter(a=>a.type==='rescan').slice(0,1).forEach(a=>out.push({k:'busy',t:`Scanning: ${describeScope(a.runScope||a.scope)} · ${wait(mins(a))}`,s:'In a Chrome tab on the Mac Mini'+long(a,25),menu:true}));
   const snd=run.filter(a=>a.live);if(snd.length)out.push({k:'busy',t:`Sending ${plural(snd.length,'reply')} · ${wait(Math.max(...snd.map(mins)))}`,s:'Typing in Discord in a Chrome tab on the Mac Mini'+long(snd[0],10)});
   const wq=q.filter(a=>a.status==='pending'&&(a.type==='rescan'||a.type==='audit'||a.live));
-  if(wq.length)out.push({k:'busy',t:`${plural(wq.length,'job')} waiting`,s:wq.map(a=>a.type==='audit'?'campaign audit':a.live?'reply':describeScope(a.scope)).slice(0,3).join(', ')+(run.length?' · starts when the current one finishes':age!=null&&age<2?' · starts within 30 seconds':' · starts when the Mac Mini checks in'),menu:true});
+  if(wq.length)out.push({k:'busy',t:`${plural(wq.length,'job')} waiting`,s:wq.map(a=>a.type==='audit'?'campaign audit':a.live?'reply':describeScope(a.scope)).slice(0,3).join(', ')+(run.length?' · starts when the current one finishes':age!=null&&age<2?' · starts within 30 seconds':' · starts when the Mac Mini checks in'),menu:!wq.every(a=>a.type==='audit'),job:wq.every(a=>a.type==='audit')?wq[0].id:null});
   if(age!=null&&age<2&&rn.chrome===false)out.push({k:'off',t:'Chrome is closed',s:'Scans and sends will fail until Chrome is open on the Mac Mini'});
   else if(age!=null&&age<2&&rn.chrome===true)out.push({k:'on',t:'Chrome open'});
   // the most recent finished scan failed (any later success clears it)
@@ -615,10 +655,10 @@ function statusLines(){
   const sf=q.filter(a=>a.live&&a.status==='failed'&&Date.now()-fin(a)<24*H);
   if(sf.length)out.push({k:'bad',t:`${plural(sf.length,'message')} failed to send`,s:sf[0].detail||'',href:'#'+(sf[0].campaign==='coaches'?'coaches':sf[0].campaign+(MINE.includes(sf[0].campaign)?'/queue':''))});
   const au=q.filter(a=>a.type==='audit'&&['done','failed'].includes(a.status)).sort((a,b)=>fin(b)-fin(a))[0];
-  if(au&&au.status==='failed')out.push({k:'bad',t:'Campaign audit failed '+ago(au.finishedAt),s:au.detail||''});
+  if(au&&au.status==='failed')out.push({k:'bad',t:'Campaign audit failed '+ago(au.finishedAt),s:(au.detail||'')+' · click for details',job:au.id});
   return out;
 }
-const stLine=l=>{const inner=`<span class="dot ${l.k}"></span><span>${esc(l.t)}${l.s?`<small>${esc(l.s)}</small>`:''}</span>`;return `<span class="stl ${l.k==='bad'?'err':l.k==='off'?'warn':l.k==='busy'?'busy':''}">${l.menu?`<a href="#" data-openmenu="1" style="display:flex;align-items:flex-start">${inner}</a>`:l.href?`<a href="${esc(l.href)}" style="display:flex;align-items:flex-start">${inner}</a>`:inner}</span>`};
+const stLine=l=>{const inner=`<span class="dot ${l.k}"></span><span>${esc(l.t)}${l.s?`<small>${esc(l.s)}</small>`:''}</span>`;return `<span class="stl ${l.k==='bad'?'err':l.k==='off'?'warn':l.k==='busy'?'busy':''}">${l.job?`<a href="#" data-jobinfo="${esc(l.job)}" style="display:flex;align-items:flex-start" title="Show progress">${inner}</a>`:l.menu?`<a href="#" data-openmenu="1" style="display:flex;align-items:flex-start">${inner}</a>`:l.href?`<a href="${esc(l.href)}" style="display:flex;align-items:flex-start">${inner}</a>`:inner}</span>`};
 
 function render(){
   const {v,sub}=route(), cc=camp('capcut');
@@ -636,7 +676,7 @@ function render(){
   $('#banner').innerHTML=(probs.length?`<div class="mstatus ${probs.some(l=>l.k==='bad')?'':probs.some(l=>l.k==='off')?'warn':'info'}">${probs.map(stLine).join('')}</div>`:'')+(offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'');
   $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
-  renderProgress();
+  renderProgress();renderJob();
 }
 const kpi=(v,l,cls='')=>`<div class="kpi"><div class="v ${cls}">${v}</div><div class="l">${l}</div></div>`;
 
@@ -1076,7 +1116,7 @@ function renderProgress(){
 }
 const typing=()=>['TEXTAREA','INPUT','SELECT'].includes(document.activeElement.tagName);
 let tick=0;
-setInterval(()=>{renderProgress();const p=progressInfo();++tick;if(live&&!typing()&&tick%5===0&&((p&&p.state!=='done')||sendsActive()))load()},1000);
+setInterval(()=>{renderProgress();const p=progressInfo();++tick;if(live&&!typing()&&tick%5===0&&((p&&p.state!=='done')||sendsActive()||(JOB&&(S.queue||[]).some(a=>a.id===JOB&&(a.status==='running'||a.status==='pending')))))load()},1000);
 
 /* ---------- actions ---------- */
 const cx=id=>camp('capcut').creators.find(x=>x.id===id);
@@ -1087,7 +1127,11 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],[data-fullaudit],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],[data-fullaudit],[data-jobinfo],[data-jobclose],[data-jobstop],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  if(d.jobinfo){e.preventDefault();JOB=d.jobinfo;renderJob();return}
+  if(d.jobclose||e.target.id==='jobpanel'){JOB=null;renderJob();return}
+  if(d.jobstop){if(!confirm('Stop this audit? If the Mac Mini is still writing it, the result is still saved when it finishes, but the Mac Mini is freed for other jobs now.'))return;
+    try{const r=await fetch('api/actions/'+d.jobstop,{method:'DELETE'});if(!r.ok)throw new Error((await r.json()).error);toast('Audit stopped');await load()}catch(err){toast('Failed: '+err.message)}return}
   if(d.openmenu){e.preventDefault();const m=$('#menu');m.classList.add('on');renderMenu();scrollTo(0,0);return}
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
@@ -1143,7 +1187,7 @@ document.addEventListener('change',e=>{
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
 });
 document.addEventListener('input',e=>{if(e.target.id==='wl_text'){WLT[e.target.dataset.c]=e.target.value;$('#wl_prev').innerHTML=mentions(fill(e.target.value,'Jordan'))}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#menu').classList.remove('on')});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#menu').classList.remove('on');JOB=null;renderJob()}});
 addEventListener('hashchange',()=>{render();scrollTo(0,0)});
 load();
 setInterval(()=>{if(live&&!typing()&&!$('#menu').classList.contains('on'))load()},30000);
