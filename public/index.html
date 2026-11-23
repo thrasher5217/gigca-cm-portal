@@ -39,7 +39,11 @@ nav a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--t2);backg
 nav a .cnt.hot{color:#fff;background:var(--red)}
 .foot{margin-top:auto;padding:12px 10px 4px;font-size:12px;color:var(--t3);display:flex;flex-direction:column;gap:4px}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
-.dot.on{background:var(--grn);box-shadow:0 0 0 3px var(--grnbg)}.dot.off{background:var(--amb);box-shadow:0 0 0 3px var(--ambbg)}
+.dot.on{background:var(--grn);box-shadow:0 0 0 3px var(--grnbg)}.dot.off{background:var(--amb);box-shadow:0 0 0 3px var(--ambbg)}.dot.bad{background:var(--red);box-shadow:0 0 0 3px var(--redbg)}
+.stl{display:flex;gap:0;align-items:flex-start;line-height:1.45}.stl .dot{margin-top:5px;flex:none}.stl a{color:inherit;text-decoration:none}.stl a:hover{text-decoration:underline}
+.stl.warn{color:var(--amb)}.stl.err{color:var(--red)}.stl small{display:block;color:var(--t3);font-size:11.5px}
+.mstatus{display:none;flex-direction:column;gap:6px;background:var(--redbg);border-radius:var(--r);padding:9px 14px;margin-bottom:14px;font-size:13px}
+.mstatus.warn{background:var(--ambbg)}
 
 /* main */
 main{min-width:0;padding:0 0 80px}
@@ -194,6 +198,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
   body{grid-template-columns:1fr}
   nav{position:static;height:auto;flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px;gap:2px}
   .brand,.foot,.navsec{display:none}nav a{white-space:nowrap}
+  .mstatus{display:flex}
   .top,.wrap{padding-left:16px;padding-right:16px}.prog{margin:14px 16px 0}
   .ci ul{columns:1}
   .pillinfo{white-space:normal}
@@ -582,19 +587,40 @@ function lastScans(){
 
 /* ---------- render ---------- */
 function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
+/* ---------- Mac Mini status: online, Chrome, failures (sidebar bottom; a strip on phones) ---------- */
+function statusLines(){
+  if(!live)return [];
+  const out=[], rn=S.runner||{}, age=runnerAge(), q=S.queue||[], fin=a=>+new Date(a.finishedAt||a.startedAt||a.createdAt);
+  if(age==null)out.push({k:'bad',t:'Mac Mini has never checked in'});
+  else if(age<2)out.push({k:'on',t:'Mac Mini online'});
+  else out.push({k:age>30?'bad':'off',t:'Mac Mini seen '+ago(rn.lastPollAt),s:'Asleep, off, updating, or nobody logged in'});
+  if(age!=null&&age<2&&rn.chrome===false)out.push({k:'off',t:'Chrome is closed',s:'Scans and sends will fail until Chrome is open on the Mac Mini'});
+  else if(age!=null&&age<2&&rn.chrome===true)out.push({k:'on',t:'Chrome open'});
+  // the most recent finished scan failed (any later success clears it)
+  const sc=q.filter(a=>a.type==='rescan'&&['done','failed'].includes(a.status)).sort((a,b)=>fin(b)-fin(a))[0];
+  if(sc&&sc.status==='failed')out.push({k:'bad',t:`Last scan failed ${ago(sc.finishedAt)}`,s:sc.detail||'no reason given',menu:true});
+  const sf=q.filter(a=>a.live&&a.status==='failed'&&Date.now()-fin(a)<24*H);
+  if(sf.length)out.push({k:'bad',t:`${plural(sf.length,'message')} failed to send`,s:sf[0].detail||'',href:'#'+(sf[0].campaign==='coaches'?'coaches':sf[0].campaign+(MINE.includes(sf[0].campaign)?'/queue':''))});
+  const au=q.filter(a=>a.type==='audit'&&['done','failed'].includes(a.status)).sort((a,b)=>fin(b)-fin(a))[0];
+  if(au&&au.status==='failed')out.push({k:'bad',t:'Campaign audit failed '+ago(au.finishedAt),s:au.detail||''});
+  return out;
+}
+const stLine=l=>{const inner=`<span class="dot ${l.k}"></span><span>${esc(l.t)}${l.s?`<small>${esc(l.s)}</small>`:''}</span>`;return `<span class="stl ${l.k==='bad'?'err':l.k==='off'?'warn':''}">${l.menu?`<a href="#" data-openmenu="1" style="display:flex;align-items:flex-start">${inner}</a>`:l.href?`<a href="${esc(l.href)}" style="display:flex;align-items:flex-start">${inner}</a>`:inner}</span>`};
+
 function render(){
   const {v,sub}=route(), cc=camp('capcut');
   const badges={slack:S.slack.length+(S.dms||[]).length,coaches:(S.coachItems||[]).length};CAMPS.forEach(k=>badges[k]=waitingOn(camp(k)).length);
   const link=([k,l,i])=>`<a href="#${k}" class="${k===v?'on':''}">${svg(i)}${l}${badges[k]?`<span class="cnt ${MINE.includes(k)||k==='slack'||k==='coaches'||(CAMPS.includes(k)&&tagsOf(camp(k)).length)?'hot':''}" ${CAMPS.includes(k)&&!MINE.includes(k)&&tagsOf(camp(k)).length?`title="${tagsOf(camp(k)).length} tagged you"`:''}>${badges[k]}</span>`:''}</a>`;
   const nC=1+CAMPS.length;
   $('#nav').innerHTML=`<div class="brand"><div class="logo">G</div>GigaCM</div>`+link(VIEWS[0])+'<div class="navsec">Campaigns</div>'+VIEWS.slice(1,nC).map(link).join('')+'<div class="navsec">Everything else</div>'+VIEWS.slice(nC).map(link).join('')+
-    `<div class="foot">${live&&S.runner&&S.runner.lastPollAt?(runnerAge()<2?'<span><span class="dot on"></span>Mac Mini online</span>':'<span><span class="dot off"></span>Mac Mini seen '+ago(S.runner.lastPollAt)+'</span>'):''}<span>Full check every 3 hours</span></div>`;
+    `<div class="foot">${statusLines().map(stLine).join('')}<span>Full check every 3 hours</span></div>`;
   $('#title').textContent=(VIEWS.find(x=>x[0]===v)||VIEWS[0])[1];
   const ls=lastScans();
   $('#stamp').innerHTML=(ls.full?`<span class="pillinfo" title="Everything: LaunchPoint, every campaign's Discord, the coaches server, DMs and Slack">Full check <b>${ago(ls.full.finishedAt)}</b>${ls.full.source==='schedule'?' · scheduled':''}</span>`:`<span class="pillinfo" title="Oldest part of the data">Full check <b>${ago(oldestScan())}</b></span>`)+
     nextPill()+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
-  $('#banner').innerHTML=offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'';
+  const probs=statusLines().filter(l=>l.k!=='on');
+  $('#banner').innerHTML=(probs.length?`<div class="mstatus ${probs.some(l=>l.k==='bad')?'':'warn'}">${probs.map(stLine).join('')}</div>`:'')+(offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'');
   $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
@@ -967,7 +993,7 @@ function renderMenu(){
   <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
   <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
   ${scans().some(a=>a.status==='pending')?`<div class="msec"><div class="bar" style="margin:0"><span class="hint">${plural(scans().filter(a=>a.status==='pending').length,'scan')} waiting for the Mac Mini</span><span class="sp"></span><button class="sm" data-clearq="scans">Cancel waiting scans</button></div></div>`:''}
-  <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
+  <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}${a.status==='failed'&&a.detail?`<br><span class="red" style="font-size:11.5px">${esc(a.detail)}</span>`:''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
 }
 
 /* ---------- progress bar ---------- */
@@ -1034,7 +1060,8 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  if(d.openmenu){e.preventDefault();const m=$('#menu');m.classList.add('on');renderMenu();scrollTo(0,0);return}
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
   if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}

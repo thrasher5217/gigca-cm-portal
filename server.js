@@ -80,6 +80,7 @@ app.get('/api/runner/pending', runnerAuth, (req, res) => res.json(getQueue().fil
 app.post('/api/runner/claim', runnerAuth, (req, res) => {
   const rn = readJson(RUNNER, {}), q = getQueue(), now = new Date().toISOString();
   rn.lastPollAt = now; rn.host = String((req.body || {}).host || '').slice(0, 60);
+  const ch = (req.body || {}).chrome; rn.chrome = typeof ch === 'boolean' ? ch : null; // null = an older runner that doesn't report it
   if (q.some(a => (a.type === 'rescan' || a.type === 'audit' || a.live) && a.status === 'running')) { writeJson(RUNNER, rn); return res.json({ scope: null, why: 'the Mac Mini is busy' }); }
   // Replies to send go first: they're quick. A waiting scan is picked up on the next poll, 30 seconds later.
   const sends = q.filter(a => a.type === 'discord_send' && a.live && a.status === 'pending').slice(0, 10);

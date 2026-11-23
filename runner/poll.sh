@@ -39,8 +39,10 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 fi
 trap 'rm -rf "$LOCK"' EXIT
 
+# Tell the portal whether Chrome is open (scans need it), so it can warn on the sidebar.
+pgrep -x "Google Chrome" >/dev/null 2>&1 && chrome=true || chrome=false
 resp=$(curl -fsS -m 20 -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "{\"host\":\"$(hostname -s | tr -cd 'A-Za-z0-9._-')\"}" "$PORTAL/api/runner/claim" 2>&1) || { log "claim failed: ${resp:0:200}"; exit 0; }
+  -d "{\"host\":\"$(hostname -s | tr -cd 'A-Za-z0-9._-')\",\"chrome\":$chrome}" "$PORTAL/api/runner/claim" 2>&1) || { log "claim failed: ${resp:0:200}"; exit 0; }
 scope=$(json_get "$resp" scope)
 sends=$(json_get "$resp" sends)
 
