@@ -6,6 +6,12 @@
 #   poll.sh --test   check that Claude Code here can see the Mac Mini's Chrome; runs no scan
 set -u
 DIR="${GIGACM_DIR:-${0:A:h:h}}"                      # the repo checkout this script lives in
+# Run from a private copy: the runner pulls updates (including this file) while it works, and a shell script edited
+# mid-run can crash without reporting. The copy is deleted as soon as it starts; the open file keeps working.
+if [[ -z "${GIGACM_RUNCOPY:-}" ]]; then
+  tmp=$(mktemp "${TMPDIR:-/tmp}/gigacm-poll.XXXXXX") && cp "$0" "$tmp" && GIGACM_RUNCOPY=1 GIGACM_DIR="$DIR" exec /bin/zsh "$tmp" "$@"
+fi
+[[ "$0" == */gigacm-poll.* ]] && rm -f "$0"
 CONF="${GIGACM_CONF:-$HOME/.gigacm}"
 LOG="${GIGACM_LOG:-$HOME/Library/Logs/gigacm-runner.log}"
 PORTAL="${GIGACM_PORTAL:-https://gigca-cm-portal-production.up.railway.app}"

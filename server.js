@@ -313,6 +313,12 @@ app.post('/api/actions/clear', (req, res) => {
   });
   writeJson(QUEUE, q); res.json({ ok: true, cancelled, removed });
 });
+// Clear failure alerts from the sidebar (the jobs stay in the history; they just stop being flagged).
+app.post('/api/actions/dismiss', (req, res) => {
+  const ids = new Set(Array.isArray((req.body || {}).ids) ? req.body.ids.map(String) : []), q = getQueue(); let n = 0;
+  q.forEach(a => { if (ids.has(a.id) && a.status === 'failed' && !a.dismissed) { a.dismissed = true; n++; } });
+  writeJson(QUEUE, q); res.json({ ok: true, dismissed: n });
+});
 app.delete('/api/actions/:id', (req, res) => {
   const q = getQueue(), a = q.find(x => x.id === req.params.id);
   if (!a || !(a.status === 'pending' || (a.status === 'running' && a.type === 'audit'))) return res.status(409).json({ error: 'not pending' });
