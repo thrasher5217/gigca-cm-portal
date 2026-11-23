@@ -578,6 +578,8 @@ function describeScope(s,c){
   return out.join(', ');
 }
 const scans=()=>(S.queue||[]).filter(a=>a.type==='rescan').slice().sort((a,b)=>+new Date(b.finishedAt||b.startedAt||b.createdAt)-+new Date(a.finishedAt||a.startedAt||a.createdAt));
+// Recent scans list: scans plus campaign audit runs, newest first
+const history=()=>(S.queue||[]).filter(a=>a.type==='rescan'||a.type==='audit').slice().sort((a,b)=>+new Date(b.finishedAt||b.startedAt||b.createdAt)-+new Date(a.finishedAt||a.startedAt||a.createdAt));
 const oldestScan=()=>{const t=S.campaigns.flatMap(c=>[c.scannedAt,c.discordScannedAt]).filter(Boolean).map(x=>+new Date(x));return t.length?new Date(Math.min(...t)).toISOString():S.generatedAt};
 function lastScans(){
   const done=scans().filter(a=>a.status==='done');
@@ -984,16 +986,17 @@ function vAudits(){
 
 /* ---------- rescan menu ---------- */
 function renderMenu(){
-  const hist=scans().slice(0,8), keep=new Set([...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part));
+  const hist=history().slice(0,8), keep=new Set([...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part));
   $('#menu').innerHTML=`<div class="mi" data-rescan="all"><div class="ic">↻</div><div><div class="ttl">Full check</div><div class="d">Every campaign's analytics and Discord, your DMs and Slack · about 15 min</div></div></div>
   <div class="msec"><div class="h">Pick what to check</div><div class="cbgrid"><span></span><span class="hd">Messages</span><span class="hd">Analytics</span>
   ${CAMPS.map(k=>`<label>${NAMES[k]}</label><span class="cc"><input type="checkbox" data-part="dc.${k}" ${keep.has('dc.'+k)?'checked':''}></span><span class="cc"><input type="checkbox" data-part="lp.${k}" ${keep.has('lp.'+k)?'checked':''}></span>`).join('')}
   <label><input type="checkbox" data-part="dms" ${keep.has('dms')?'checked':''}> Discord DMs</label><span></span><span></span>
   <label><input type="checkbox" data-part="coaches" ${keep.has('coaches')?'checked':''}> Launchpoint Coaches server</label><span></span><span></span>
+  <label title="The in-depth audit of last week for every campaign. Runs after any scans you tick, so it uses the fresh data."><input type="checkbox" data-part="audit" ${keep.has('audit')?'checked':''}> Campaign audit (last week)</label><span></span><span></span>
   <label><input type="checkbox" data-part="slack" ${keep.has('slack')?'checked':''}> Slack</label><span></span><span></span></div>
-  <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
+  <div class="bar" style="margin:10px 0 2px"><span class="hint">Messages = Discord replies waiting. Analytics = LaunchPoint posts, views, CPM. The audit also runs by itself every 2 days.</span><span class="sp"></span><button class="pri sm" id="runparts">Run selected</button></div></div>
   ${scans().some(a=>a.status==='pending')?`<div class="msec"><div class="bar" style="margin:0"><span class="hint">${plural(scans().filter(a=>a.status==='pending').length,'scan')} waiting for the Mac Mini</span><span class="sp"></span><button class="sm" data-clearq="scans">Cancel waiting scans</button></div></div>`:''}
-  <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}${a.status==='failed'&&a.detail?`<br><span class="red" style="font-size:11.5px">${esc(a.detail)}</span>`:''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
+  <div class="msec"><div class="h">Recent scans</div><div class="hist">${hist.length?hist.map(a=>`<div><span class="tag ${a.status==='done'?'grn':a.status==='failed'?'red':a.status==='running'?'acc':''}">${a.status==='done'?'Done':a.status==='failed'?'Failed':a.status==='running'?'Running':a.status==='pending'?'Queued':esc(a.status)}</span><span>${a.type==='audit'?'Campaign audit':esc(describeScope(a.runScope||a.scope))}${a.source==='schedule'?' <span class="faint">· scheduled</span>':''}${a.status==='failed'&&a.detail?`<br><span class="red" style="font-size:11.5px">${esc(a.detail)}</span>`:''}</span><span class="w">${ago(a.finishedAt||a.startedAt||a.createdAt)}</span></div>`).join(''):'<span class="faint">No scans yet.</span>'}</div></div>`;
 }
 
 /* ---------- progress bar ---------- */
@@ -1064,7 +1067,10 @@ document.addEventListener('click',async e=>{
   if(d.openmenu){e.preventDefault();const m=$('#menu');m.classList.add('on');renderMenu();scrollTo(0,0);return}
   if(t.id==='scanbtn'){const m=$('#menu');m.classList.toggle('on');if(m.classList.contains('on'))renderMenu();return}
   if(!e.target.closest('.menuwrap'))$('#menu').classList.remove('on');
-  if(t.id==='runparts'){const p=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part);if(!p.length)return toast('Tick at least one box');rescan('parts:'+p.join(','))}
+  if(t.id==='runparts'){const all=[...document.querySelectorAll('[data-part]:checked')].map(i=>i.dataset.part),aud=all.includes('audit'),p=all.filter(x=>x!=='audit');if(!all.length)return toast('Tick at least one box');
+    // the campaign audit is its own job: the Mac Mini runs it after the scans, so it's written from the fresh data
+    const list=[...(p.length?[{type:'rescan',scope:'parts:'+p.join(',')}]:[]),...(aud?[{type:'audit'}]:[])];
+    if(await act(list)){toast(aud&&p.length?'Queued · the audit runs right after the scans':aud?'Audit queued · the Mac Mini writes it once it is free':fireMsg());$('#menu').classList.remove('on');render()}}
   else if(d.rescan)rescan(d.rescan);
   else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
   else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[]).find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
