@@ -139,8 +139,11 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 .empty{padding:28px;text-align:center;color:var(--t3);background:var(--s1);border:1px dashed var(--line2);border-radius:12px}
 
 /* job progress panel */
-#jobpanel{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
-#jobpanel.on{display:flex}
+#jobpanel,#detpanel{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
+#jobpanel.on,#detpanel.on{display:flex}
+#detpanel .box{background:var(--s1);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);width:520px;max-width:100%;max-height:86vh;overflow:auto;padding:18px 20px;animation:pop .14s ease-out}#detpanel h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;gap:8px}
+.drow{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line)}.drow:last-child{border-bottom:0}.drow .ck{width:20px;height:20px;font-size:10px}.drow b{font-weight:500}.drow small{display:block;color:var(--t3);font-size:12px}
+[data-det]{cursor:pointer}
 #jobpanel .box{background:var(--s1);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);width:440px;max-width:100%;padding:18px 20px}#jobpanel .box.anim{animation:pop .14s ease-out}
 #jobpanel h3{margin:0 0 2px;font-size:15px;display:flex;align-items:center;gap:8px}
 .jsteps{display:flex;flex-direction:column;margin:14px 0 4px}
@@ -235,6 +238,7 @@ a.lk{color:var(--acc);text-decoration:none;font-size:12px;font-weight:500;white-
 <div id="toast"></div>
 <div id="tipbox" role="tooltip"></div>
 <div id="jobpanel"></div>
+<div id="detpanel"></div>
 <script>
 /* ---------- constants ---------- */
 const CAMPS=['capcut','artlist','creatify','melius','yri'];
@@ -431,20 +435,26 @@ function audit(c,name,tf=TF){
   // 1. no creator left over 15h
   const waitIn=u=>tf==='today'||(now-u.waitingMin*6e4>=t0&&now-u.waitingMin*6e4<t1);
   const lateNow=un.filter(u=>u.waitingMin>=900&&waitIn(u)), ev=(cs.resp||[]).filter(e=>e[0]*6e4>=t0&&e[0]*6e4<t1), slow15=ev.filter(e=>e[1]>900);
+  // who a reply-time entry was for: the creator in that channel (entries from older scans have no channel)
+  const who=id=>{if(!id||id==='x'||!/^\d+$/.test(id))return 'A creator (names appear after the next full check)';const x=c.creators.find(y=>y.channelId===id),ch=chans[id];return (x?x.name+' · ':'')+(ch?'#'+ch.name:'channel '+id)};
+  const dt=m=>new Date(m*6e4).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+  const replyRows=list=>list.map(e=>({t:who(e[2]),s:`messaged ${dt(e[0])} · answered after ${wait(e[1])}`,url:/^\d+$/.test(e[2]||'')?chanUrl(c,e[2]):null,st:e[1]>900?'bad':e[1]>300?'warn':'ok'}));
   const n15=lateNow.length+slow15.length;
   add({k:'reply',label:'No creator left over 15h without a reply',state:!scanned?'na':!cs.resp&&!lateNow.length&&tf!=='today'?'na':n15?'bad':'ok',v:!cs.resp&&tf!=='today'&&!lateNow.length?'next scan':n15?n15+' over 15h':'0 over 15h',
-    detail:(lateNow.length?`${lateNow.length} still waiting over 15h`:'')+(slow15.length?`${lateNow.length?' · ':''}${slow15.length} answered after 15h+`:'')+(!n15?'Every creator answered within 15h':'')+covNote,items:lateNow.map(u=>`${u.channel} · waiting ${wait(u.waitingMin)}`)});
+    detail:(lateNow.length?`${lateNow.length} still waiting over 15h`:'')+(slow15.length?`${lateNow.length?' · ':''}${slow15.length} answered after 15h+`:'')+(!n15?'Every creator answered within 15h':'')+covNote,items:lateNow.map(u=>`${u.channel} · waiting ${wait(u.waitingMin)}`),
+    rows:[...lateNow.map(u=>({t:`${u.creator||'Creator'} · ${u.channel}`,s:`still waiting · ${wait(u.waitingMin)} so far`,url:msgUrl(c,u),st:'bad'})),...replyRows(slow15.slice().sort((a,b)=>b[1]-a[1]))]});
   // 2. median response under 5h
   const mins=ev.map(e=>e[1]), md=cs.resp?med(mins):(tf==='7d'?cs.medianResponseMin:null);
-  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:WK&&md>300?'Strike 3 · median over 5h this week':null});
+  add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:WK&&md>300?'Strike 3 · median over 5h this week':null,rows:replyRows(ev.slice().sort((a,b)=>b[1]-a[1])),rowsNote:'Every reply in this window, slowest first'});
   // 3. check-ins, 3 a day (ET), last before 10 PM
   if(cs.checkins){
     const set=new Set(cs.checkins), h=+etParts(scanAt).hour, today=etDay(scanAt), days=[];
     for(let t=t0+6*H;t<t1;t+=DAY){const d=etDay(t);if(d<=today&&!days.includes(d))days.push(d)}
     const nd=days.length;let poss=0,hit=0;const missed=[];
-    days.forEach(d=>WIN.forEach(w=>{if(d===today&&h<w[2])return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(d.slice(5)+' '+w[1])}));
+    const WL={start:'start (5am–noon ET)',mid:'mid (noon–5pm ET)',end:'end (5–10pm ET)'};
+    days.forEach(d=>WIN.forEach(w=>{if(d===today&&h<w[2])return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(`${fmtD(d)} · ${WL[w[1]]}`)}));
     const miss=poss-hit, perWeek=nd>=7?miss/nd*7:miss;
-    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${cs.checkinBy&&cs.checkinBy.length?` · counting messages from ${cs.checkinBy.join(', ')}`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice(-20),strike:WK&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
+    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${cs.checkinBy&&cs.checkinBy.length?` · counting messages from ${cs.checkinBy.join(', ')}`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice().reverse(),rowsNote:'Missed windows, newest first',strike:WK&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
   }else add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:'na',v:'next scan',detail:'Measured from the next full scan'});
   // 4. new creators contacted within 24h of joining
   const fresh=mine.filter(([id])=>{const j=snow(id);return j&&j>=t0-(tf==='today'||tf==='yday'?DAY:0)&&j<t1});
@@ -606,6 +616,24 @@ function lastScans(){
 
 /* ---------- render ---------- */
 function route(){const [v,...rest]=(location.hash||'#today').slice(1).split('/');return {v:VIEWS.some(x=>x[0]===v)?v:'today',sub:decodeURIComponent(rest.join('/')||'')}}
+/* ---------- click a grade: the exact items behind it ---------- */
+let DET=null; // 'campaign|coach|timeframe|check'
+const detAttr=(c,name,tf,k)=>`data-det="${esc([c.id,name,tf,k].join('|'))}"`;
+function renderDet(){
+  const el=$('#detpanel');if(!DET){el.classList.remove('on');return}
+  const [cid,name,tf,k]=DET.split('|'),c=camp(cid);if(!c){DET=null;el.classList.remove('on');return}
+  const a=fullAudit(c,name,tf),x=a.all.find(q=>q.k===k),r=RULES[k]||{t:k};if(!x){DET=null;el.classList.remove('on');return}
+  const rows=x.rows&&x.rows.length?x.rows:(x.items||[]).map(t=>({t:String(t)}));
+  el.innerHTML=`<div class="box" role="dialog" aria-label="${esc(r.t)}"><h3>${ck(x.state)}${esc(r.t)}<span class="sp"></span><button class="sm ghost" data-detclose="1">✕</button></h3>
+    <div class="hint">${esc(name)} · ${esc(c.name)} · ${esc(['warm','first','quiet'].includes(k)?'right now':tfLabel(tf))}</div>
+    <p style="margin:12px 0 4px;color:var(--text)"><b>${esc(x.v||'')}</b>${x.v?' · ':''}${esc(x.detail)}</p>${x.strike?`<div class="amb" style="font-size:12.5px">${esc(x.strike)}</div>`:''}
+    ${rows.length?`<div class="hint" style="margin-top:12px">${esc(x.rowsNote||(x.state==='ok'?'Details':'What caused it'))} · ${rows.length}</div><div style="margin-top:4px">${rows.slice(0,80).map(o=>`<div class="drow">${o.st?ck(o.st):'<span></span>'}<div><b>${esc(o.t)}</b>${o.s?`<small>${esc(o.s)}</small>`:''}</div>${o.url?`<a class="lk" href="${esc(o.url)}" target="_blank" rel="noopener">Open ↗</a>`:'<span></span>'}</div>`).join('')}${rows.length>80?`<div class="hint">…and ${rows.length-80} more</div>`:''}</div>`
+      :`<div class="jnote info">${x.state==='na'?'No data for this window yet.':'Nothing to list: '+esc(r.ok||'all good')+'.'}</div>`}
+    <div class="hint" style="margin-top:12px">${esc(r.w||'')}</div>
+    <div class="actions" style="margin-top:12px"><a class="lk" href="#${c.id}/coach:${encodeURIComponent(name)}" data-detclose="1">Full coach page →</a><span class="sp"></span><button class="sm pri" data-detclose="1">Close</button></div></div>`;
+  el.classList.add('on');
+}
+
 /* ---------- progress panel for a campaign audit (click the sidebar line) ---------- */
 let JOB=null; // id of the job whose panel is open
 const hm=t=>t?new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
@@ -885,7 +913,7 @@ function vCampAudit(c){
   const rows=c.coachNames.map(n=>{const a=fullAudit(c,n,tf);return {a,sc:scoreOf(a),note:au&&(au.coaches||[]).find(x=>x.name===n)}}).sort((x,y)=>(y.sc.score??-1)-(x.sc.score??-1));
   h+=`<h2>Coach performance <span class="sub">${esc(tfLow(tf))} · hover a mark for how it's graded</span></h2>`+(rows.length?`<div class="list">${rows.map(({a,sc,note})=>{const col=sc.score==null?'var(--t3)':sc.score>=85?'var(--grn)':sc.score>=60?'var(--amb)':'var(--red)';
     return `<div class="item" style="grid-template-columns:32px 1fr">${av(a.name)}<div><div class="ihead"><b>${esc(a.name)}</b><span class="meta">${plural(a.cr.length,'creator')}</span>${note&&note.rating?`<span class="tag ${/strong/i.test(note.rating)?'grn':/on track/i.test(note.rating)?'blu':/attention/i.test(note.rating)?'amb':'red'}">${esc(note.rating)}</span>`:''}<span class="sp"></span><b class="num" style="color:${col}">${sc.score==null?'—':sc.score+'%'}</b></div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${a.all.map(k=>`<span class="tag" ${tipAttr(k.k,k,first(a.name))} style="gap:6px">${ck(k.state)}${esc(SHORT[k.k]||k.label)}</span>`).join('')}</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${a.all.map(k=>`<span class="tag" ${tipAttr(k.k,k,first(a.name))} ${detAttr(c,a.name,tf,k.k)} style="gap:6px">${ck(k.state)}${esc(SHORT[k.k]||k.label)}</span>`).join('')}</div>
     ${note&&note.summary?`<p style="margin:8px 0 0;color:var(--text)">${esc(note.summary)}</p>`:''}${note&&note.fix&&note.fix.length?`<ul style="margin:6px 0 0;padding-left:18px;color:var(--t2)">${note.fix.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`:''}
     ${a.strikes.length?`<div class="hint" style="margin-top:6px"><span class="amb">Strike risks:</span> ${a.strikes.map(esc).join(' · ')}</div>`:''}</div></div>`}).join('')}</div>`:'<div class="empty">No coaches found yet.</div>');
   const list=(t,arr,f)=>arr&&arr.length?`<div class="card"><h3>${t}</h3><ul style="margin:0;padding-left:18px">${arr.map(x=>`<li style="margin:3px 0">${f?f(x):esc(x)}</li>`).join('')}</ul></div>`:'';
@@ -918,8 +946,8 @@ function vSummary(c,audits){
   h+=`<div class="bar" style="margin-top:22px"><h2 style="margin:0">Coach checks <span class="sub">UGC Coach SOP and strike rules</span></h2><span class="sp"></span>${tfSeg()}</div>
   <div class="tw"><table><thead><tr><th>Coach</th><th class="n">Creators</th>${CHECKCOLS.map(([k,l],i)=>`<th class="c" ${tipAttr(k)}${i===8?' style="border-left:1px solid var(--line)"':''}>${l}</th>`).join('')}<th>Strike risk</th><th></th></tr>
   <tr><th></th><th></th><th class="c faint" colspan="8" style="font-weight:400">${esc(tfLabel(TF))}</th><th class="c faint" colspan="3" style="font-weight:400;border-left:1px solid var(--line)">Right now</th><th></th><th></th></tr></thead><tbody>
-  ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k],i)=>{const x=a.all.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,first(a.name))}${i===8?' style="border-left:1px solid var(--line)"':''}>${ck(x.state)}<div class="faint" style="font-size:11px;margin-top:2px">${esc(x.v||'')}</div></td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
-  <div class="hint" style="margin-top:8px">Hover or tap a mark (or a column name) to see what it checks and how it's graded. Strikes are judged on the 7-day and Last week views. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET). Warming-up creators are left out of posting checks.</div>`;
+  ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k],i)=>{const x=a.all.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,first(a.name))} ${detAttr(c,a.name,TF,k)}${i===8?' style="border-left:1px solid var(--line)"':''}>${ck(x.state)}<div class="faint" style="font-size:11px;margin-top:2px">${esc(x.v||'')}</div></td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
+  <div class="hint" style="margin-top:8px">Click a mark for the exact creators and times behind it; hover for how it's graded. Strikes are judged on the 7-day and Last week views. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET). Warming-up creators are left out of posting checks.</div>`;
   const flagged=audits.filter(a=>a.bad||a.warn);
   h+=`<h2>Message these coaches <span class="sub">${flagged.length} · ${esc(tfLow(TF))}</span></h2>`;
   h+=flagged.length?`<div class="cards">${flagged.map(a=>`<div class="card"><h3>${esc(a.name)}<span class="sp"></span>${a.bad?`<span class="tag red">${a.bad} to fix</span>`:''}${a.warn?`<span class="tag amb">${a.warn} to watch</span>`:''}</h3><textarea id="cm_${esc(c.id+a.name)}" style="min-height:130px">${esc(coachMsg(a))}</textarea><div class="actions"><button class="sm pri" data-copyta="cm_${esc(c.id+a.name)}">Copy message</button><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">See details →</a></div></div>`).join('')}</div>`:'<div class="empty">Nothing to raise with any coach for this timeframe.</div>';
@@ -939,7 +967,7 @@ function vCoach(c,a){
   if(!a)return '<div class="empty">Coach not found.</div>';
   const per=Object.fromEntries(TFS.map(([k])=>[k,audit(c,a.name,k)])), keys=per.today.checks.map(k=>k.k), msg=coachMsg(a);
   let h=`<div class="kpis">${kpi(a.cr.length,'Creators')}${kpi(a.counts.posting||0,'Posting','grn')}${kpi(a.counts.warming||0,'Warming up','blu')}${kpi(a.un.length,'Waiting on a reply now',a.un.length?'amb':'')}${kpi(a.cs.medianResponseMin!=null?wait(a.cs.medianResponseMin):'—','Median response, 7d',a.cs.medianResponseMin>300?'red':'')}${kpi(per['7d'].strikes.length+a.now.filter(k=>k.strike).length,'Strike risks this week',per['7d'].strikes.length?'amb':'')}</div>`;
-  h+=`<h2>Performance by timeframe</h2><div class="tw"><table><thead><tr><th>Metric</th>${TFS.map(([k,l])=>`<th class="c">${esc(k==='custom'?tfLabel('custom'):l)}</th>`).join('')}</tr></thead><tbody>${keys.map(k=>`<tr><td style="white-space:normal;min-width:170px" ${tipAttr(k)}>${esc(MLABEL[k])}</td>${TFS.map(([t])=>{const x=per[t].checks.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,tfLabel(t))}><span style="display:inline-flex;gap:8px;align-items:center">${ck(x.state)}<span class="${x.state==='bad'?'red':x.state==='warn'?'amb':'mute'}" style="min-width:58px;text-align:left;font-size:12.5px">${esc(x.v||'')}</span></span></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+  h+=`<h2>Performance by timeframe</h2><div class="tw"><table><thead><tr><th>Metric</th>${TFS.map(([k,l])=>`<th class="c">${esc(k==='custom'?tfLabel('custom'):l)}</th>`).join('')}</tr></thead><tbody>${keys.map(k=>`<tr><td style="white-space:normal;min-width:170px" ${tipAttr(k)}>${esc(MLABEL[k])}</td>${TFS.map(([t])=>{const x=per[t].checks.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,tfLabel(t))} ${detAttr(c,a.name,t,k)}><span style="display:inline-flex;gap:8px;align-items:center">${ck(x.state)}<span class="${x.state==='bad'?'red':x.state==='warn'?'amb':'mute'}" style="min-width:58px;text-align:left;font-size:12.5px">${esc(x.v||'')}</span></span></td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
   h+=`<h2>Right now</h2><div class="card checklist">${a.now.map(k=>checkRow(k)).join('')}</div>`;
   h+=`<div class="bar" style="margin-top:28px"><h2 style="margin:0">Details</h2><span class="sp"></span>${tfSeg()}</div><div class="card checklist">${a.checks.map(k=>checkRow(k)).join('')}</div>`;
   if(msg)h+=`<h2>Message to ${esc(first(a.name))} <span class="sub">${esc(a.tfLabel.toLowerCase())}</span></h2><div class="card"><textarea id="cm_one" style="min-height:140px">${esc(msg)}</textarea><div class="actions"><button class="pri sm" data-copyta="cm_one">Copy message</button><span class="hint">Send it in their channel in the Launchpoint Coaches Discord</span></div></div>`;
@@ -1127,7 +1155,9 @@ async function sendTo(ids,text){
 }
 async function rescan(scope){if(await act([{type:'rescan',scope}]))toast(fireMsg());$('#menu').classList.remove('on');render()}
 document.addEventListener('click',async e=>{
-  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],[data-fullaudit],[data-jobinfo],[data-jobclose],[data-jobstop],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  const t=e.target.closest('[data-rescan],[data-recheck],[data-copyreply],[data-welcome],[data-copyta],[data-bulk],[data-cancel],[data-fc],[data-ff],[data-who],[data-tf],[data-markread],[data-unread],[data-showread],[data-sendreply],[data-sendcoach],[data-cof],[data-sendwelcome],[data-rank],[data-clearq],[data-rcamp],[data-runaudit],[data-openmenu],[data-fullaudit],[data-jobinfo],[data-jobclose],[data-jobstop],[data-det],[data-detclose],#mm_send,#scanbtn,#runparts')||e.target, d=t.dataset||{};
+  if(d.det){hideTip();DET=d.det;renderDet();return}
+  if(d.detclose||e.target.id==='detpanel'){DET=null;renderDet();if(!d.detclose||t.tagName!=='A')return}
   if(d.jobinfo){e.preventDefault();JOB=d.jobinfo;renderJob();return}
   if(d.jobclose||e.target.id==='jobpanel'){JOB=null;renderJob();return}
   if(d.jobstop){if(!confirm('Stop this audit? If the Mac Mini is still writing it, the result is still saved when it finishes, but the Mac Mini is freed for other jobs now.'))return;
@@ -1187,7 +1217,7 @@ document.addEventListener('change',e=>{
   else if(d.t){T[d.t]=Number(t.value)||0;try{localStorage.setItem('gk_thresholds',JSON.stringify(T))}catch(e){}render()}
 });
 document.addEventListener('input',e=>{if(e.target.id==='wl_text'){WLT[e.target.dataset.c]=e.target.value;$('#wl_prev').innerHTML=mentions(fill(e.target.value,'Jordan'))}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#menu').classList.remove('on');JOB=null;renderJob()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('#menu').classList.remove('on');JOB=null;renderJob();DET=null;renderDet()}});
 addEventListener('hashchange',()=>{render();scrollTo(0,0)});
 load();
 setInterval(()=>{if(live&&!typing()&&!$('#menu').classList.contains('on'))load()},30000);
