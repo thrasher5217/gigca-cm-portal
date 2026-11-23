@@ -459,8 +459,20 @@ function audit(c,name,tf=TF){
   }else add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:'na',v:'next scan',detail:'Measured from the next full scan'});
   // 4. new creators contacted within 24h of joining
   const fresh=mine.filter(([id])=>{const j=snow(id);return j&&j>=t0-(tf==='today'||tf==='yday'?DAY:0)&&j<t1});
-  const slow=fresh.map(([id,v])=>{const j=snow(id),ft=v.firstStaffAt?+new Date(v.firstStaffAt):null,any=ft||v.lastStaffMsgAt;return {v,j,ft,bad:ft?ft-j>24*H:!any&&now-j>24*H}}).filter(o=>o.bad);
-  add({k:'contact',label:'New creators contacted within 24h',state:!scanned?'na':!fresh.length?'na':slow.length?'bad':'ok',v:fresh.length?`${fresh.length-slow.length}/${fresh.length}`:'none new',detail:fresh.length?`${fresh.length-slow.length} of ${fresh.length} new creators contacted within 24h`:'No new creators in this window',items:slow.map(o=>`#${o.v.name} · ${o.ft?'first reply after '+wait((o.ft-o.j)/60000):'joined '+ago(new Date(o.j))+', no coach message'}`)});
+  // Only judge a channel when its first messages were loaded: the scan reads each channel's latest ~50 messages, so in a busy
+  // channel the coach's real first message can be older than that (it used to show up as a late "first reply").
+  // On time if a coach message within 24h was seen. Late only if the loaded messages reach back to the channel's creation
+  // (the scan loaded its start, or the oldest loaded message is within an hour of it), so nothing earlier could be missing.
+  const startOk=(id,v)=>v.startLoaded===true||(v.oldestMsgAt&&+new Date(v.oldestMsgAt)-snow(id)<=H);
+  const judged=fresh.map(([id,v])=>{const j=snow(id),ft=v.firstStaffAt?+new Date(v.firstStaffAt):null,onTime=ft&&ft-j<=24*H,ok=onTime||startOk(id,v)||now-j<24*H;
+    return {id,v,j,ft,ok,bad:!onTime&&ok&&now-j>24*H}});
+  const slow=judged.filter(o=>o.bad), unk=judged.filter(o=>!o.ok), chk=judged.length-unk.length, crName=id=>{const x=c.creators.find(y=>y.channelId===id);return x?x.name+' · ':''};
+  add({k:'contact',label:'New creators contacted within 24h',state:!scanned||!fresh.length||!chk?'na':slow.length?'bad':'ok',v:fresh.length?(chk?`${chk-slow.length}/${chk}`:'not loaded'):'none new',
+    detail:fresh.length?`${chk-slow.length} of ${chk} new creators contacted within 24h${unk.length?` · ${unk.length} couldn't be checked (their first messages weren't loaded; the next full check loads them)`:''}`:'No new creators in this window',
+    items:slow.map(o=>`#${o.v.name} · ${o.ft?'first coach message '+wait((o.ft-o.j)/60000)+' after joining':'joined '+ago(new Date(o.j))+', no coach message'}`),
+    rows:[...slow.map(o=>({t:crName(o.id)+'#'+o.v.name,s:o.ft?`joined ${fmtD(chiDate(o.j))} · first coach message ${wait((o.ft-o.j)/60000)} later`:`joined ${ago(new Date(o.j))} · no coach message yet`,url:chanUrl(c,o.id),st:'bad'})),
+      ...unk.map(o=>({t:crName(o.id)+'#'+o.v.name,s:"couldn't check: the channel's first messages weren't loaded",url:chanUrl(c,o.id),st:'na'})),
+      ...judged.filter(o=>o.ok&&!o.bad).map(o=>({t:crName(o.id)+'#'+o.v.name,s:o.ft?`first coach message ${wait((o.ft-o.j)/60000)} after joining`:'contacted',url:chanUrl(c,o.id),st:'ok'}))]});
   // 5. posting (active creators only; warming up and first-post-due are left out)
   if(tf==='today'||tf==='yday'){
     const key=tf==='today'?'postsToday':'postsYesterday', miss=active.filter(r=>!(r.x[key]>0));

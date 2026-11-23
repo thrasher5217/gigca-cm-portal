@@ -49,13 +49,33 @@
     for (const x of arr) { if (x.isCat) cur = x; else x.catName = cur ? cur.name.replace(/ \(category\)$/, '') : null; }
     return arr;
   }
-  async function read(path, c) {
-    go(path); let lis = [], prev = -1, stable = 0;
+  // Read a channel's latest messages. With needMore (a test on what's loaded so far), keep scrolling up toward the start of
+  // the channel while it says more is needed, e.g. to find a new creator's real first coach message. read.top tells whether
+  // the start of the channel was reached.
+  async function read(path, c, needMore) {
+    go(path); let lis = [], prev = -1, stable = 0; read.top = null;
     for (let i = 0; i < 40; i++) {
       await sleep(150); lis = [...document.querySelectorAll(`li[id^="chat-messages-${c}-"]`)];
       if (i > 12 && !lis.length && location.pathname.endsWith(c) && document.querySelector('ol[data-list-id="chat-messages"]')) break;
       if (lis.length && lis.length === prev) { if (++stable >= 3) break; } else stable = 0; prev = lis.length;
     }
+    let out = parse(lis);
+    if (needMore && out.length && needMore(out)) {
+      const all = new Map(out.map(m => [m.id, m])), ol = document.querySelector('ol[data-list-id="chat-messages"]');
+      const sc = ol && (ol.closest('[class*="scroller"]') || (ol.parentElement && ol.parentElement.parentElement)); let same = 0; read.top = false;
+      for (let i = 0; i < 40 && sc; i++) {
+        if (sc.scrollTop === 0) { sc.scrollTop = 40; await sleep(80); } // already at the top: nudge so the jump fires a scroll
+        sc.scrollTop = 0; await sleep(900);
+        const n = all.size; parse([...document.querySelectorAll(`li[id^="chat-messages-${c}-"]`)]).forEach(m => all.set(m.id, m)); // collect as we go: Discord unloads the bottom
+        const sorted = [...all.values()].sort((a, b) => (a.t < b.t ? -1 : 1));
+        if (!needMore(sorted)) { read.top = true; break; }
+        if (all.size === n) { if (++same >= 3) { read.top = true; break; } } else same = 0; // nothing older loads: this is the start
+      }
+      out = [...all.values()].sort((a, b) => (a.t < b.t ? -1 : 1));
+    } else if (needMore) read.top = true;
+    return out;
+  }
+  function parse(lis) {
     let author = null; const out = [];
     for (const li of lis) {
       const u = [...li.querySelectorAll('[id^="message-username-"]')].find(e => !e.closest('[id^="message-reply-context-"]'));
@@ -70,6 +90,9 @@
     }
     return out;
   }
+  // Channels made in the last 10 days whose loaded messages don't reach back to their creation: scroll up for the first messages.
+  const born = id => Number((BigInt(id) >> 22n) + 1420070400000n);
+  const needStart = id => { const b = born(id); if (Date.now() - b > 10 * 864e5) return null; return ms => { const o = ms.find(m => m.t); return !!o && +new Date(o.t) - b > 2 * 36e5; }; };
   const clean = a => a.split('\n')[0].replace(/,\s*$/, '').trim(), isBot = m => m.b || /\bAPP\b/.test(m.a);
   // Coach check-in windows (SOP: 3 a day, the last before 10 PM ET): start 5am-noon, mid noon-5pm, end 5-10pm ET.
   const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
@@ -140,7 +163,7 @@
       const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st), firstS = hs.find(m => m.st);
       const warm = [...hs].reverse().find(m => !m.st && WARM.test(m.x)), iso = t => t ? new Date(t).toISOString() : null;
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
-        lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), oldestMsgAt: iso(hs[0] && hs[0].t),
+        lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), startLoaded: c.startLoaded ?? null, oldestMsgAt: iso(hs[0] && hs[0].t),
         warmAt: iso(warm && warm.t), warmText: warm ? warm.x.slice(0, 160) : null };
       const ls = L && !L.st ? clockStart(L) : null;
       if (L && !L.st) un.push({ id: c.id + '-' + L.t, channelId: c.id, messageId: L.id || null, startAt: iso(ls || L.t), lastAt: iso(L.end), channel: '#' + c.name, coach, creator: L.a, waitingMin: Math.round((now - (ls || L.t)) / 6e4), message: L.x.slice(0, 600),
@@ -187,7 +210,7 @@
         }
         if (!cats.length) throw new Error('no matching category found');
         const list = sb.filter(x => !x.isCat && cats.includes(x.catName) && !/voice channel|stage channel/i.test(x.name)), chans = [];
-        for (const ch of list) { D.progress = `${key} ${chans.length}/${list.length}`; chans.push({ id: ch.id, name: ch.name.replace(/ \(.*$/, '').replace(/^unread, /, ''), cat: ch.catName, msgs: await read(`/channels/${g}/${ch.id}`, ch.id).catch(() => []) }); }
+        for (const ch of list) { D.progress = `${key} ${chans.length}/${list.length}`; const msgs = await read(`/channels/${g}/${ch.id}`, ch.id, needStart(ch.id)).catch(() => []); chans.push({ id: ch.id, name: ch.name.replace(/ \(.*$/, '').replace(/^unread, /, ''), cat: ch.catName, msgs, startLoaded: read.top }); }
         const r = opt ? analyze(chans, STAFF, { ...opt, freq: true }) : analyze(chans);
         D.campaigns.push({ id: key, guildId: g, ...(opt ? { name: opt.name, role: opt.role, discordCategories: cats } : {}), discordScannedAt: new Date().toISOString(), discord: { coachStats: r.coachStats, channels: r.channels }, unanswered: r.unanswered, tagged: r.tagged });
       } catch (e) { D.errors.push(key + ': ' + e); }
