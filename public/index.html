@@ -39,11 +39,14 @@ nav a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--t2);backg
 nav a .cnt.hot{color:#fff;background:var(--red)}
 .foot{margin-top:auto;padding:12px 10px 4px;font-size:12px;color:var(--t3);display:flex;flex-direction:column;gap:4px}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px}
-.dot.on{background:var(--grn);box-shadow:0 0 0 3px var(--grnbg)}.dot.off{background:var(--amb);box-shadow:0 0 0 3px var(--ambbg)}.dot.bad{background:var(--red);box-shadow:0 0 0 3px var(--redbg)}
+.dot.on{background:var(--grn);box-shadow:0 0 0 3px var(--grnbg)}.dot.off{background:var(--amb);box-shadow:0 0 0 3px var(--ambbg)}.dot.bad{background:var(--red);box-shadow:0 0 0 3px var(--redbg)}.dot.busy{background:var(--blu);box-shadow:0 0 0 3px var(--blubg);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.stl.busy{color:var(--blu)}
 .stl{display:flex;gap:0;align-items:flex-start;line-height:1.45}.stl .dot{margin-top:5px;flex:none}.stl a{color:inherit;text-decoration:none}.stl a:hover{text-decoration:underline}
+nav .stl a{padding:0;border-radius:0;font-weight:inherit;color:inherit}nav .stl a:hover{background:none}
 .stl.warn{color:var(--amb)}.stl.err{color:var(--red)}.stl small{display:block;color:var(--t3);font-size:11.5px}
 .mstatus{display:none;flex-direction:column;gap:6px;background:var(--redbg);border-radius:var(--r);padding:9px 14px;margin-bottom:14px;font-size:13px}
-.mstatus.warn{background:var(--ambbg)}
+.mstatus.warn{background:var(--ambbg)}.mstatus.info{background:var(--blubg)}
 
 /* main */
 main{min-width:0;padding:0 0 80px}
@@ -597,6 +600,13 @@ function statusLines(){
   if(age==null)out.push({k:'bad',t:'Mac Mini has never checked in'});
   else if(age<2)out.push({k:'on',t:'Mac Mini online'});
   else out.push({k:age>30?'bad':'off',t:'Mac Mini seen '+ago(rn.lastPollAt),s:'Asleep, off, updating, or nobody logged in'});
+  // what the Mac Mini is doing right now, and what's waiting
+  const run=q.filter(a=>a.status==='running'), mins=a=>Math.max(0,Math.round((Date.now()-+new Date(a.startedAt||a.createdAt))/6e4)), long=(a,lim)=>mins(a)>lim?' · taking longer than usual':'';
+  run.filter(a=>a.type==='audit').forEach(a=>out.push({k:'busy',t:`Writing campaign audit · ${wait(mins(a))}`,s:'In the background on the Mac Mini: no window or tab opens. Usually under 15 min'+long(a,15)}));
+  run.filter(a=>a.type==='rescan').slice(0,1).forEach(a=>out.push({k:'busy',t:`Scanning: ${describeScope(a.runScope||a.scope)} · ${wait(mins(a))}`,s:'In a Chrome tab on the Mac Mini'+long(a,25),menu:true}));
+  const snd=run.filter(a=>a.live);if(snd.length)out.push({k:'busy',t:`Sending ${plural(snd.length,'reply')} · ${wait(Math.max(...snd.map(mins)))}`,s:'Typing in Discord in a Chrome tab on the Mac Mini'+long(snd[0],10)});
+  const wq=q.filter(a=>a.status==='pending'&&(a.type==='rescan'||a.type==='audit'||a.live));
+  if(wq.length)out.push({k:'busy',t:`${plural(wq.length,'job')} waiting`,s:wq.map(a=>a.type==='audit'?'campaign audit':a.live?'reply':describeScope(a.scope)).slice(0,3).join(', ')+(run.length?' · starts when the current one finishes':age!=null&&age<2?' · starts within 30 seconds':' · starts when the Mac Mini checks in'),menu:true});
   if(age!=null&&age<2&&rn.chrome===false)out.push({k:'off',t:'Chrome is closed',s:'Scans and sends will fail until Chrome is open on the Mac Mini'});
   else if(age!=null&&age<2&&rn.chrome===true)out.push({k:'on',t:'Chrome open'});
   // the most recent finished scan failed (any later success clears it)
@@ -608,7 +618,7 @@ function statusLines(){
   if(au&&au.status==='failed')out.push({k:'bad',t:'Campaign audit failed '+ago(au.finishedAt),s:au.detail||''});
   return out;
 }
-const stLine=l=>{const inner=`<span class="dot ${l.k}"></span><span>${esc(l.t)}${l.s?`<small>${esc(l.s)}</small>`:''}</span>`;return `<span class="stl ${l.k==='bad'?'err':l.k==='off'?'warn':''}">${l.menu?`<a href="#" data-openmenu="1" style="display:flex;align-items:flex-start">${inner}</a>`:l.href?`<a href="${esc(l.href)}" style="display:flex;align-items:flex-start">${inner}</a>`:inner}</span>`};
+const stLine=l=>{const inner=`<span class="dot ${l.k}"></span><span>${esc(l.t)}${l.s?`<small>${esc(l.s)}</small>`:''}</span>`;return `<span class="stl ${l.k==='bad'?'err':l.k==='off'?'warn':l.k==='busy'?'busy':''}">${l.menu?`<a href="#" data-openmenu="1" style="display:flex;align-items:flex-start">${inner}</a>`:l.href?`<a href="${esc(l.href)}" style="display:flex;align-items:flex-start">${inner}</a>`:inner}</span>`};
 
 function render(){
   const {v,sub}=route(), cc=camp('capcut');
@@ -623,7 +633,7 @@ function render(){
     nextPill()+
     (ls.part?`<span class="pillinfo" title="Only part of the data was refreshed">Recheck · ${esc(describeScope(ls.part.runScope||ls.part.scope))} <b>${ago(ls.part.finishedAt)}</b></span>`:'');
   const probs=statusLines().filter(l=>l.k!=='on');
-  $('#banner').innerHTML=(probs.length?`<div class="mstatus ${probs.some(l=>l.k==='bad')?'':'warn'}">${probs.map(stLine).join('')}</div>`:'')+(offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'');
+  $('#banner').innerHTML=(probs.length?`<div class="mstatus ${probs.some(l=>l.k==='bad')?'':probs.some(l=>l.k==='off')?'warn':'info'}">${probs.map(stLine).join('')}</div>`:'')+(offline?'<div class="sample"><b>Can\'t reach the portal server right now</b> (it may be restarting). Showing the last data loaded; retrying every few seconds.</div>':S.sample?'<div class="sample"><b>Sample data.</b> Names and numbers are made up to show the layout.</div>':'');
   $('#view').innerHTML=CAMPS.includes(v)?vCampaign(v,sub):({today:vToday,coaches:vCoaches,creators:vCreators,slack:vSlack,audits:vAudits}[v]||vToday)();
   if($('#menu').classList.contains('on'))renderMenu();
   renderProgress();
