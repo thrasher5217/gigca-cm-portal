@@ -465,15 +465,19 @@ function audit(c,name,tf=TF){
   // On time if a coach message within 24h was seen. Late only if the loaded messages reach back to the channel's creation
   // (the scan loaded its start, or the oldest loaded message is within an hour of it), so nothing earlier could be missing.
   const startOk=(id,v)=>v.startLoaded===true||(v.oldestMsgAt&&+new Date(v.oldestMsgAt)-snow(id)<=H);
-  const judged=fresh.map(([id,v])=>{const j=snow(id),ft=v.firstStaffAt?+new Date(v.firstStaffAt):null,onTime=ft&&ft-j<=24*H,ok=onTime||startOk(id,v)||now-j<24*H;
-    return {id,v,j,ft,ok,bad:!onTime&&ok&&now-j>24*H}});
+  // The clock starts when the creator was welcomed: the channel's first message (the LaunchPoint welcome) when the scan loaded the
+  // start of the channel, otherwise when the channel was made. LaunchPoint can make a channel before it posts the welcome.
+  const joinT=(id,v)=>{const b=snow(id),f=v.firstMsgAt?+new Date(v.firstMsgAt):0;return v.startLoaded===true&&f>b?f:b};
+  const judged=fresh.map(([id,v])=>{const j=joinT(id,v),born=snow(id),ft=v.firstStaffAt?+new Date(v.firstStaffAt):null,onTime=ft&&ft-j<=24*H,ok=onTime||startOk(id,v)||now-j<24*H;
+    return {id,v,j,born,ft,ok,bad:!onTime&&ok&&now-j>24*H}});
+  const whenT=t=>new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
   const slow=judged.filter(o=>o.bad), unk=judged.filter(o=>!o.ok), chk=judged.length-unk.length, crName=id=>{const x=c.creators.find(y=>y.channelId===id);return x?x.name+' · ':''};
   add({k:'contact',label:'New creators contacted within 24h',state:!scanned||!fresh.length||!chk?'na':slow.length?'bad':'ok',v:fresh.length?(chk?`${chk-slow.length}/${chk}`:'not loaded'):'none new',
     detail:fresh.length?`${chk-slow.length} of ${chk} new creators contacted within 24h${unk.length?` · ${unk.length} couldn't be checked (their first messages weren't loaded; the next full check loads them)`:''}`:'No new creators in this window',
     items:slow.map(o=>`#${o.v.name} · ${o.ft?'first coach message '+wait((o.ft-o.j)/60000)+' after joining':'joined '+ago(new Date(o.j))+', no coach message'}`),
-    rows:[...slow.map(o=>({t:crName(o.id)+'#'+o.v.name,s:o.ft?`joined ${fmtD(chiDate(o.j))} · first coach message ${wait((o.ft-o.j)/60000)} later`:`joined ${ago(new Date(o.j))} · no coach message yet`,url:chanUrl(c,o.id),st:'bad'})),
+    rows:[...slow.map(o=>({t:crName(o.id)+'#'+o.v.name,s:`${o.j>o.born?'welcomed':'channel made'} ${whenT(o.j)} · ${o.ft?`first coach message ${whenT(o.ft)}, ${wait((o.ft-o.j)/60000)} later`:'no coach message found'}`,url:chanUrl(c,o.id),st:'bad'})),
       ...unk.map(o=>({t:crName(o.id)+'#'+o.v.name,s:"couldn't check: the channel's first messages weren't loaded",url:chanUrl(c,o.id),st:'na'})),
-      ...judged.filter(o=>o.ok&&!o.bad).map(o=>({t:crName(o.id)+'#'+o.v.name,s:o.ft?`first coach message ${wait((o.ft-o.j)/60000)} after joining`:'contacted',url:chanUrl(c,o.id),st:'ok'}))]});
+      ...judged.filter(o=>o.ok&&!o.bad).map(o=>({t:crName(o.id)+'#'+o.v.name,s:o.ft?`${o.j>o.born?'welcomed':'channel made'} ${whenT(o.j)} · first coach message ${wait((o.ft-o.j)/60000)} later`:'contacted',url:chanUrl(c,o.id),st:'ok'}))]});
   // 5. posting (active creators only; warming up and first-post-due are left out)
   if(tf==='today'||tf==='yday'){
     const key=tf==='today'?'postsToday':'postsYesterday', miss=active.filter(r=>!(r.x[key]>0));
@@ -880,7 +884,7 @@ const RULES={
   reply:{t:'Replies within 15h',w:'Every creator message gets a coach reply within 15 hours (UGC Coach SOP). Counts creators still waiting now plus replies that took longer in this window.',ok:'No creator waited over 15h',bad:'Anyone waited (or is waiting) over 15h'},
   median:{t:'Median response time',w:'The middle reply time across all creator messages the coach answered in this window. Acknowledgments like "ok, thanks" start no clock; your Mark read counts as a reply.',ok:'3h or less',warn:'Between 3h and 5h',bad:'Over 5h (Strike 3 on the weekly views)'},
   checkins:{t:'3 check-ins a day',w:'A message from the coach themselves (not you or other staff) in any of their category\'s channels, in each window, Eastern time: start 5am–noon, mid noon–5pm, end 5pm–2am (midnight to 2am counts for the previous day).',ok:'Every window hit',warn:'Some missed (weekly views)',bad:'Any missed (one day), or 7+ missed in a week (Strike 5)'},
-  contact:{t:'New creators contacted in 24h',w:'Each creator who joined in this window got a first coach message within 24 hours of their channel being made.',ok:'Every new creator contacted within 24h',bad:'Anyone contacted late, or not at all'},
+  contact:{t:'New creators contacted in 24h',w:'Each creator who joined in this window got a first coach message within 24 hours of being welcomed (the first message in their channel, usually the LaunchPoint welcome; channel creation if the start couldn\'t be loaded).',ok:'Every new creator contacted within 24h',bad:'Anyone contacted late, or not at all'},
   posted:{t:'Active creators posting',w:'Only active creators count (warming up and first-post-due are left out). Today: who has posted so far. Yesterday: who missed. Longer views: missed days per creator.',ok:'Nobody missed',warn:'Someone has 1 missed day (or hasn\'t posted yet today)',bad:'Anyone missed yesterday, or has 2+ missed days (escalate to the CM)'},
   volume:{t:'Post volume vs quota',w:'Posts made versus expected (posts a day × active days) across the coach\'s active creators.',ok:'80% or more of quota',warn:'50–80%',bad:'Under 50%'},
   idle:{t:'No 3-day posting gaps',w:'Active creators going 3+ days without a post after warm-up. That needs same-day escalation to the CM.',ok:'Nobody',bad:'Anyone with a 3+ day gap'},
