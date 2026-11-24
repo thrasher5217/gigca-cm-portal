@@ -94,9 +94,10 @@
   const born = id => Number((BigInt(id) >> 22n) + 1420070400000n);
   const needStart = id => { const b = born(id); if (Date.now() - b > 10 * 864e5) return null; return ms => { const o = ms.find(m => m.t); return !!o && +new Date(o.t) - b > 2 * 36e5; }; };
   const clean = a => a.split('\n')[0].replace(/,\s*$/, '').trim(), isBot = m => m.b || /\bAPP\b/.test(m.a);
-  // Coach check-in windows (SOP: 3 a day, the last before 10 PM ET): start 5am-noon, mid noon-5pm, end 5-10pm ET.
+  // Coach check-in windows, ET: start 5am-noon, mid noon-5pm, end 5pm-2am. Midnight to 2am counts as the previous day's end check-in.
   const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' });
-  const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 && h < 22 ? 'c' : null; return w && `${p.year}-${p.month}-${p.day}:${w}`; };
+  const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 || h < 2 ? 'c' : null; if (!w) return null;
+    const d = h < 2 ? new Date(Date.UTC(+p.year, +p.month - 1, +p.day) - 864e5).toISOString().slice(0, 10) : `${p.year}-${p.month}-${p.day}`; return `${d}:${w}`; };
   const WARM = /warm(ing)?[\s-]?up|warming|warmup|warm(ed)? (my|the|up)?\s*(acc|account|feed|page)/i;
   const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
   // A question or a problem always needs a reply, even if it starts with "ok" or "thanks".

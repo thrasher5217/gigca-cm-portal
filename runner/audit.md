@@ -9,13 +9,13 @@ RULES
 INPUT
 Read the JSON file named on the last line (INPUT_FILE=...). It covers one period for every campaign: period.label, from period.from to period.to (Chicago dates). Usually that is last calendar week (Monday to Sunday); Ty can also ask for the last 7 days or custom dates. Write about that period, and call it by its label ("last week", "the last 7 days", or the dates).
 - totals: campaign totals for the period from LaunchPoint. For last week they include the week before (prevViews, prevPosts, prevCpm), creators posting and the top videos; for other periods, totals.note says what is missing. null means LaunchPoint has no data for that campaign yet.
-- coaches: per coach for the period: replies, median reply time in minutes, replies over 15h, acknowledgments that needed no reply, check-ins hit out of checkinsPossible (3 a day for each whole day: start 5am-noon, mid noon-5pm, end 5-10pm ET; only the coach's own messages count), creators waiting on them now, and their creators' posts and views in the period.
+- coaches: per coach for the period: replies, median reply time in minutes, replies over 15h, acknowledgments that needed no reply, check-ins hit out of checkinsPossible (3 a day for each whole day: start 5am-noon, mid noon-5pm, end 5pm-2am ET; only the coach's own messages count), creators waiting on them now, and their creators' posts and views in the period.
 - creators: per creator: coach, days on the campaign, posts/views/CPM in the period (null when not available for that period), the last 7 days of posts (oldest first, today last), 7-day and all-time CPM.
 - waitingOldest: the creators who have waited longest for a coach reply right now.
 
 STANDARDS (UGC Coach SOP and strike rules)
 - No creator unanswered over 15h; median reply under 5h (over 5h for the week = Strike 3).
-- 3 check-ins a day, the last before 10 PM ET (7+ missed in a week = Strike 5; scale this to the length of the period).
+- 3 check-ins a day: start 5am-noon, mid noon-5pm, end 5pm-2am ET (7+ missed in a week = Strike 5; scale this to the length of the period).
 - New creators contacted within 24h; first post within 5 days of joining; warm-up about 2 days (2+ creators warming up over 7 days = Strike 4).
 - Active creators post every day: 1 missed day = coach messages them (why + makeup plan); 2+ missed days in a week = Standard Review and tell the CM; 3 days in a row with no post after warm-up = same-day escalation.
 - CPM: the campaign target is targetCpm. A coach group under target removes a strike. Low views alone are never a reason to cut anyone.

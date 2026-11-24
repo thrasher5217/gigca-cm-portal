@@ -265,7 +265,7 @@ const TEMPLATES={
 };
 const GUILD={capcut:'1569756845319520387',artlist:'1570552478817067038',creatify:'1562201369811877949',melius:'1559661121588306052'};
 const H=36e5, DAY=864e5;
-const WIN=[['a','start',12],['b','mid',17],['c','end',22]]; // ET check-in windows and the hour each one closes
+const WIN=[['a','start',12],['b','mid',17],['c','end',26]]; // ET check-in windows and the hour each one closes (26 = 2 AM the next day)
 
 /* ---------- state ---------- */
 let S={campaigns:[],slack:[],audits:[],queue:[]}, live=false, offline=false, localQueue=[], sentIds=new Set(), copied=new Set();
@@ -447,16 +447,17 @@ function audit(c,name,tf=TF){
   // 2. median response under 5h
   const mins=ev.map(e=>e[1]), md=cs.resp?med(mins):(tf==='7d'?cs.medianResponseMin:null);
   add({k:'median',label:'Median response under 5h',state:md==null?'na':md>300?'bad':md>180?'warn':'ok',v:md==null?(cs.resp?'no replies':'next scan'):wait(md),detail:(md==null?(cs.resp?'No creator messages answered in this window':'Measured per timeframe from the next full scan'):`${wait(md)} across ${plural(cs.resp?mins.length:cs.replies7d||0,'reply')}${covNote}`)+leftOut(cs,t0,t1),strike:WK&&md>300?'Strike 3 · median over 5h this week':null,rows:replyRows(ev.slice().sort((a,b)=>b[1]-a[1])),rowsNote:'Every reply in this window, slowest first'});
-  // 3. check-ins, 3 a day (ET), last before 10 PM
+  // 3. check-ins, 3 a day (ET): start 5am-noon, mid noon-5pm, end 5pm-2am
   if(cs.checkins){
     const set=new Set(cs.checkins), h=+etParts(scanAt).hour, today=etDay(scanAt), days=[];
     for(let t=t0+6*H;t<t1;t+=DAY){const d=etDay(t);if(d<=today&&!days.includes(d))days.push(d)}
     const nd=days.length;let poss=0,hit=0;const missed=[];
-    const WL={start:'start (5am–noon ET)',mid:'mid (noon–5pm ET)',end:'end (5–10pm ET)'};
-    days.forEach(d=>WIN.forEach(w=>{if(d===today&&h<w[2])return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(`${fmtD(d)} · ${WL[w[1]]}`)}));
+    const WL={start:'start (5am–noon ET)',mid:'mid (noon–5pm ET)',end:'end (5pm–2am ET)'};
+    const yday=etDay(scanAt-DAY);
+    days.forEach(d=>WIN.forEach(w=>{if((d===today&&h<w[2])||(d===yday&&w[2]>24&&h<w[2]-24))return;poss++;if(set.has(d+':'+w[0]))hit++;else missed.push(`${fmtD(d)} · ${WL[w[1]]}`)}));
     const miss=poss-hit, perWeek=nd>=7?miss/nd*7:miss;
-    add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${cs.checkinBy&&cs.checkinBy.length?` · counting messages from ${cs.checkinBy.join(', ')}`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice().reverse(),rowsNote:'Missed windows, newest first',strike:WK&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
-  }else add({k:'checkins',label:'3 check-ins a day, last before 10 PM ET',state:'na',v:'next scan',detail:'Measured from the next full scan'});
+    add({k:'checkins',label:'3 check-ins a day (start, mid, end by 2 AM ET)',state:poss===0?'na':nd>=7?(perWeek>=7?'bad':miss?'warn':'ok'):(miss?'bad':'ok'),v:poss?`${hit}/${poss}`:'none due',detail:poss?`${hit} of ${poss} check-in windows hit${nd>=7?` · ${miss} missed`:''}${cs.checkinBy&&cs.checkinBy.length?` · counting messages from ${cs.checkinBy.join(', ')}`:''}${nd===1&&tf==='today'?' so far':''}${cov<.9&&nd>=7?covNote:''}`:'No check-in window has closed yet today',items:missed.slice().reverse(),rowsNote:'Missed windows, newest first',strike:WK&&miss>=7?`Strike 5 · ${miss} missed check-ins in 7 days`:null});
+  }else add({k:'checkins',label:'3 check-ins a day (start, mid, end by 2 AM ET)',state:'na',v:'next scan',detail:'Measured from the next full scan'});
   // 4. new creators contacted within 24h of joining
   const fresh=mine.filter(([id])=>{const j=snow(id);return j&&j>=t0-(tf==='today'||tf==='yday'?DAY:0)&&j<t1});
   // Only judge a channel when its first messages were loaded: the scan reads each channel's latest ~50 messages, so in a busy
@@ -523,7 +524,7 @@ function fullAudit(c,name,tf=TF){const a=audit(c,name,tf),n=nowChecks(c,name);a.
 const LINE={
   reply:k=>`${k.v} on replies. ${k.items.length?'Still waiting: '+k.items.slice(0,8).join(', '):k.detail}`,
   median:k=>`Median response is ${k.v}. It needs to be under 5h`,
-  checkins:k=>`Check-ins: ${k.detail}. It's 3 a day, the last one before 10 PM ET`,
+  checkins:k=>`Check-ins: ${k.detail}. It's 3 a day: start 5am–noon, mid noon–5pm, end 5pm–2am ET`,
   contact:k=>`New creators not contacted within 24h: ${k.items.slice(0,8).join(', ')}`,
   posted:k=>`${k.mt||k.detail}: ${k.items.slice(0,10).join(', ')}`,
   volume:k=>`Post volume is ${k.detail}${k.items.length?'. Furthest behind: '+k.items.slice(0,6).join(', '):''}`,
@@ -878,7 +879,7 @@ const CHECKCOLS=[['reply','15h replies'],['median','Median <5h'],['checkins','Ch
 const RULES={
   reply:{t:'Replies within 15h',w:'Every creator message gets a coach reply within 15 hours (UGC Coach SOP). Counts creators still waiting now plus replies that took longer in this window.',ok:'No creator waited over 15h',bad:'Anyone waited (or is waiting) over 15h'},
   median:{t:'Median response time',w:'The middle reply time across all creator messages the coach answered in this window. Acknowledgments like "ok, thanks" start no clock; your Mark read counts as a reply.',ok:'3h or less',warn:'Between 3h and 5h',bad:'Over 5h (Strike 3 on the weekly views)'},
-  checkins:{t:'3 check-ins a day',w:'A message from the coach themselves (not you or other staff) in any of their category\'s channels, in each window, Eastern time: start 5am–noon, mid noon–5pm, end 5–10pm.',ok:'Every window hit',warn:'Some missed (weekly views)',bad:'Any missed (one day), or 7+ missed in a week (Strike 5)'},
+  checkins:{t:'3 check-ins a day',w:'A message from the coach themselves (not you or other staff) in any of their category\'s channels, in each window, Eastern time: start 5am–noon, mid noon–5pm, end 5pm–2am (midnight to 2am counts for the previous day).',ok:'Every window hit',warn:'Some missed (weekly views)',bad:'Any missed (one day), or 7+ missed in a week (Strike 5)'},
   contact:{t:'New creators contacted in 24h',w:'Each creator who joined in this window got a first coach message within 24 hours of their channel being made.',ok:'Every new creator contacted within 24h',bad:'Anyone contacted late, or not at all'},
   posted:{t:'Active creators posting',w:'Only active creators count (warming up and first-post-due are left out). Today: who has posted so far. Yesterday: who missed. Longer views: missed days per creator.',ok:'Nobody missed',warn:'Someone has 1 missed day (or hasn\'t posted yet today)',bad:'Anyone missed yesterday, or has 2+ missed days (escalate to the CM)'},
   volume:{t:'Post volume vs quota',w:'Posts made versus expected (posts a day × active days) across the coach\'s active creators.',ok:'80% or more of quota',warn:'50–80%',bad:'Under 50%'},
@@ -961,7 +962,7 @@ function vSummary(c,audits){
   <div class="tw"><table><thead><tr><th>Coach</th><th class="n">Creators</th>${CHECKCOLS.map(([k,l],i)=>`<th class="c" ${tipAttr(k)}${i===8?' style="border-left:1px solid var(--line)"':''}>${l}</th>`).join('')}<th>Strike risk</th><th></th></tr>
   <tr><th></th><th></th><th class="c faint" colspan="8" style="font-weight:400">${esc(tfLabel(TF))}</th><th class="c faint" colspan="3" style="font-weight:400;border-left:1px solid var(--line)">Right now</th><th></th><th></th></tr></thead><tbody>
   ${audits.map(a=>`<tr><td><b>${esc(a.name)}</b></td><td class="n">${a.cr.length}</td>${CHECKCOLS.map(([k],i)=>{const x=a.all.find(q=>q.k===k);return `<td class="c" ${tipAttr(k,x,first(a.name))} ${detAttr(c,a.name,TF,k)}${i===8?' style="border-left:1px solid var(--line)"':''}>${ck(x.state)}<div class="faint" style="font-size:11px;margin-top:2px">${esc(x.v||'')}</div></td>`}).join('')}<td>${a.strikes.map(s=>`<span class="tag amb" title="${esc(s)}">${esc(s.split(' · ')[0])}</span>`).join(' ')||'<span class="faint">—</span>'}</td><td><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">Details →</a></td></tr>`).join('')}</tbody></table></div>
-  <div class="hint" style="margin-top:8px">Click a mark for the exact creators and times behind it; hover for how it's graded. Strikes are judged on the 7-day and Last week views. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5–10pm ET). Warming-up creators are left out of posting checks.</div>`;
+  <div class="hint" style="margin-top:8px">Click a mark for the exact creators and times behind it; hover for how it's graded. Strikes are judged on the 7-day and Last week views. Check-ins count coach messages in their channels and announcements (start 5am–noon, mid noon–5pm, end 5pm–2am ET). Warming-up creators are left out of posting checks.</div>`;
   const flagged=audits.filter(a=>a.bad||a.warn);
   h+=`<h2>Message these coaches <span class="sub">${flagged.length} · ${esc(tfLow(TF))}</span></h2>`;
   h+=flagged.length?`<div class="cards">${flagged.map(a=>`<div class="card"><h3>${esc(a.name)}<span class="sp"></span>${a.bad?`<span class="tag red">${a.bad} to fix</span>`:''}${a.warn?`<span class="tag amb">${a.warn} to watch</span>`:''}</h3><textarea id="cm_${esc(c.id+a.name)}" style="min-height:130px">${esc(coachMsg(a))}</textarea><div class="actions"><button class="sm pri" data-copyta="cm_${esc(c.id+a.name)}">Copy message</button><a class="lk" href="#${c.id}/coach:${encodeURIComponent(a.name)}">See details →</a></div></div>`).join('')}</div>`:'<div class="empty">Nothing to raise with any coach for this timeframe.</div>';
