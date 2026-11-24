@@ -86,7 +86,9 @@
       const rc = li.querySelector('[id^="message-reply-context-"]'), ru = rc && rc.querySelector('[id^="message-username-"],[class*="username"]');
       if (author && tm) out.push({ id: li.id.split('-').pop(), a: author, t: tm.getAttribute('datetime'), x: txt.slice(0, 400) || (acc && acc.children.length ? '[attachment]' : ''), b: !!li.querySelector('[class*="botTag"],[class*="appTag"]'), r: ru ? ru.innerText.replace(/^@/, '').trim() : null,
         // me = Ty (the logged-in account) reacted to this message: Discord marks his own reactions as pressed
-        me: !!li.querySelector('[id^="message-reactions-"] [aria-pressed="true"], [class*="reactionMe"], [class*="reaction_"][class*="selected"]') });
+        me: !!li.querySelector('[id^="message-reactions-"] [aria-pressed="true"], [class*="reactionMe"], [class*="reaction_"][class*="selected"]'),
+        // rx = someone reacted to this message (Discord only shows who on hover). In a creator channel that's the coach.
+        rx: !!li.querySelector('[id^="message-reactions-"] [class*="reaction"], [id^="message-reactions-"] [role="button"]') });
     }
     return out;
   }
@@ -99,7 +101,7 @@
   const win = t => { const p = Object.fromEntries(ET.formatToParts(new Date(t)).map(x => [x.type, x.value])), h = +p.hour; const w = h >= 5 && h < 12 ? 'a' : h >= 12 && h < 17 ? 'b' : h >= 17 || h < 2 ? 'c' : null; if (!w) return null;
     const d = h < 2 ? new Date(Date.UTC(+p.year, +p.month - 1, +p.day) - 864e5).toISOString().slice(0, 10) : `${p.year}-${p.month}-${p.day}`; return `${d}:${w}`; };
   const WARM = /warm(ing)?[\s-]?up|warming|warmup|warm(ed)? (my|the|up)?\s*(acc|account|feed|page)/i;
-  const ACK = /^(ok(ay)?|k+|bet|thanks?( you)?|thank u|ty|got it|sounds good|will do|perfect|awesome|cool|great|yes+|yep|yup|👍|🙏|❤️|🔥|lol|np|done|on it)[\s!.,a-z👍🙏❤️🔥]*$/i;
+  const ACK = /^(ok(ay)?|okk+|k+|kk|bet|thanks?( you)?|thank u|tysm|ty|got it|gotcha|got you|sounds good|will do|i will|i'?ll|dw|no worries|noted|understood|appreciate( it)?|for sure|sure|alright|aight|perfect|awesome|cool|great|yes+|yessir|yep|yup|ofc|of course|👍|🙏|❤️|🔥|💪|lol|np|done|on it)[\s!.,'a-z👍🙏❤️🔥💪]*$/i;
   // A question or a problem always needs a reply, even if it starts with "ok" or "thanks".
   const QUESTION = /\?|\b(what|whats|what's|when|where|why|how|who|which|wdym|hbu)\b|^\s*(can|could|should|shall|do|does|did|is|are|am|was|were|would|have|has|any|anyone)\b/im;
   const PROBLEM = /\b(help|need|issue|problem|wrong|error|stuck|confused|can'?t|won'?t|not|banned|flagged|shadow ?banned|pay|paid|payment|money|invoice|link)\b/i;
@@ -107,7 +109,8 @@
   const noReply = x => { x = String(x || '').trim(); return !x || (x.length <= 60 && x !== '[attachment]' && ACK.test(x) && !QUESTION.test(x) && !PROBLEM.test(x)); };
   // When the reply clock starts for a run of creator messages: at the first message that needs a reply (null = none does).
   // Ty reacting to a message counts as acknowledging it and everything before it in the run; only later messages can start it.
-  const clockStart = r => { let k = -1; r.ms.forEach((m, i) => { if (m.me) k = i; }); const m = r.ms.slice(k + 1).find(m => !noReply(m.x)); return m ? m.t : null; };
+  // A reaction on a creator message (Ty's, or anyone's in a creator channel: that's the coach) acknowledges it and everything before it in the run.
+  const clockStart = r => { let k = -1; r.ms.forEach((m, i) => { if (m.me || m.rx) k = i; }); const m = r.ms.slice(k + 1).find(m => !noReply(m.x)); return m ? m.t : null; };
   const COACHES = { id: '1552479657566142566', own: '1567608337720152285',
     cats: /capcut|artlist|creatify|melius|yri|ugc op|\bops\b|admin/i,
     skip: /polymarket/i, // Ty no longer oversees Polymarket: never read its categories (even ones like "Polymarket Admin")
@@ -142,7 +145,7 @@
     const staff = new Set(Object.keys(seenIn).filter(a => seenIn[a] >= 3)), now = Date.now(), wk = now - 7 * 864e5, mo = now - 31 * 864e5, un = [], tagged = [], channels = {}, rt = {}, wins = {}, winsBy = {}, posts = {}, resp = {}, acks = {};
     for (const c of chans) {
       const key = c.cat.replace(/['’]s Creators.*$/i, '').trim(), coach = opt.coach || COACH[key] || key, general = /announcement|general/i.test(c.name);
-      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, r: m.r, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
+      const hs = c.msgs.filter(m => !isBot(m)).map(m => ({ id: m.id, a: clean(m.a), t: +new Date(m.t), x: m.x, me: m.me, rx: m.rx, r: m.r, st: staffRe ? staffRe.test(clean(m.a)) || (opt.freq && staff.has(clean(m.a))) : staff.has(clean(m.a)) })), runs = [];
       for (const m of hs) { const L = runs[runs.length - 1]; if (L && L.st === m.st) { L.x += '\n' + m.x; L.end = m.t; L.n++; L.ms.push(m); } else runs.push({ st: m.st, a: m.a, t: m.t, end: m.t, x: m.x, n: 1, id: m.id, ms: [m] }); }
       // check-in windows per staff author; only the coach's own messages count (decided after all channels are read)
       hs.forEach(m => { if (m.st && m.t > mo) { const w = win(m.t), by = (winsBy[coach] = winsBy[coach] || {}); posts[coach] = posts[coach] || {}; posts[coach][m.a] = (posts[coach][m.a] || 0) + 1; if (w) (by[m.a] = by[m.a] || new Set()).add(w); } });
