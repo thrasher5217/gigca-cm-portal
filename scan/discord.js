@@ -6,7 +6,7 @@
 //   drafts = {"#channel-name": "reply text"}, acks = ["#channel-name", ...] (messages that need no reply).
 (() => {
   const GUILDS = [
-    ['capcut', '1569756845319520387', /Creators/i], ['artlist', '1570552478817067038', /^Team /i],
+    ['capcut', '1569756845319520387', /Creators/i], ['artlist', '1570552478817067038', /^Team |Creators|Van Gogh|Da Vinci|Aristotle/i, { server: /artlist/i, fallbackOnly: true }],
     ['creatify', '1562201369811877949', /Creators/i], ['melius', '1559661121588306052', /Creators/i],
     // YRI lives in the shared UGC University server: no fixed id, found by server name; only the Team Ty category (Ty's creators).
     ['yri', null, /Team Ty\b/i, { server: /UGC\s*Univ/i, section: /\bYRI\b/i, coach: 'Ty McGuire', name: 'YRI', role: 'cm' }]];
@@ -22,11 +22,11 @@
     throw new Error('server not found in the Discord server list (is it inside a closed folder?)');
   }
   // Discord display names that don't start with the coach's first name (check-ins only count the coach's own messages)
-  const ALIAS = { 'Mathew Wu': ['matwu'], 'Baraa Alrash': ['baroobi'], 'Ty McGuire': ['Ty M', 'tym0559'] };
+  const ALIAS = { 'Mathew Wu': ['matwu'], 'Baraa Alrash': ['baroobi'], 'Ty McGuire': ['Ty M', 'tym0559'], 'Ryan Soto': ['yan', 'ryan'] };
   const isCoach = (coach, a) => { a = String(a || '').toLowerCase(); const f = String(coach || '').split(' ')[0].toLowerCase();
     return !!a && ((f.length > 1 && (a === f || a.startsWith(f + ' ') || a === String(coach).toLowerCase())) || (ALIAS[coach] || []).some(x => a === x.toLowerCase() || a.startsWith(x.toLowerCase()))); };
   const COACH = { 'Ty': 'Ty McGuire', 'Amrin': 'Amrin Jahan', 'Dakota': 'Dakota Crane', 'Team Aristotle': 'Joseph Ferrall', 'Team Da Vinci': 'Razeen Khan',
-    'Team Van Gogh': 'Ryan Soto', 'Mat': 'Mathew Wu', 'Eric': 'Eric Liang', 'Grace': 'Grace Goldstein', 'Anna': 'Anna Florek', 'Baraa': 'Baraa Alrash' };
+    'Team Van Gogh': 'Ryan Soto', 'Van Goghs': 'Ryan Soto', 'Van Gogh': 'Ryan Soto', 'Team Van Goghs': 'Ryan Soto', 'Razeen': 'Razeen Khan', 'Joseph': 'Joseph Ferrall', 'Mat': 'Mathew Wu', 'Eric': 'Eric Liang', 'Grace': 'Grace Goldstein', 'Anna': 'Anna Florek', 'Baraa': 'Baraa Alrash' };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const dkey = (cid, ch) => (cid === 'capcut' ? '' : cid + ' ') + ch; // draft/ack key
   const go = p => { history.pushState({}, '', p); dispatchEvent(new PopStateEvent('popstate')); };
@@ -200,13 +200,18 @@
         D.channelUpdates = [{ campaign: SC.key, guildId: gid, channelId: SC.channelId, item: r.unanswered[0] || null, tagged: r.tagged[0] || null, info: r.channels[SC.channelId] || null }];
       } catch (e) { D.errors.push('channel: ' + e); }
     }
-    for (const G of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
-      const [key, , re, opt] = G;
+    for (const G0 of GUILDS.filter(x => SC.mode === 'all' || (SC.mode === 'campaign' && x[0] === SC.key) || (SC.mode === 'parts' && (SC.keys || []).includes(x[0])))) {
+      let G = G0; const [key, , re] = G0, opt = G0[3] && !G0[3].fallbackOnly ? G0[3] : null;
       try {
         if (!G[1]) { go('/channels/@me'); await sleep(2500); }
-        const g = await guildOf(G);
+        let g = await guildOf(G);
         go(`/channels/${g}`); await sleep(3500);
-        const sb = await sidebar();
+        let sb = await sidebar();
+        // Saved server id not working (no matching categories)? Find the server by name in the server list and try again.
+        if (G0[1] && G0[3] && G0[3].server && !sb.some(x => !x.isCat && x.catName && re.test(x.catName))) {
+          go('/channels/@me'); await sleep(2500); const alt = await guildOf([key, null, re, G0[3]]).catch(() => null);
+          if (alt && alt !== g) { g = alt; go(`/channels/${g}`); await sleep(3500); sb = await sidebar(); D.errors.push(`${key}: saved server id had no coach categories; found the server by name (${g})`); }
+        }
         let cats = [...new Set(sb.filter(x => !x.isCat && x.catName && re.test(x.catName)).map(x => x.catName))];
         if (opt && opt.section && cats.length > 1) { // several "Team Ty" categories: keep the YRI one(s)
           const heads = sb.filter(x => x.isCat).map(x => x.name.replace(/ \(category\)$/, ''));

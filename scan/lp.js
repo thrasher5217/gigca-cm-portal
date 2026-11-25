@@ -95,7 +95,16 @@
   }
   const out = [], errs = {};
   const only = Array.isArray(window.__lpScope) && window.__lpScope.length ? window.__lpScope : null; // optional: just these campaigns
-  for (const [id, name, cid, role] of CAMPAIGNS.filter(x => !only || only.includes(x[2]))) { try { out.push(await scan(id, name, cid, role)); } catch (e) { errs[cid] = String(e); } }
+  // If a saved campaign id stops working (e.g. LaunchPoint recreated Artlist), find the campaign by name and retry once.
+  const NAME_RE = { artlist: /\bartlist\b/i, melius: /\bmelius\b/i, creatify: /\bcreatify\b/i, capcut: /\bcap\s?cut\b/i, yri: /\bYRI\b/i };
+  for (const [id, name, cid, role] of CAMPAIGNS.filter(x => !only || only.includes(x[2]))) {
+    try { out.push(await scan(id, name, cid, role)); }
+    catch (e) {
+      const alt = NAME_RE[cid] ? await findByName(NAME_RE[cid]).catch(() => null) : null;
+      if (alt && alt !== id) { try { out.push(await scan(alt, name, cid, role)); notes[cid] = `saved campaign id failed; found ${name} by name (${alt})`; continue; } catch (e2) { e = e2; } }
+      errs[cid] = String(e);
+    }
+  }
   window.__lpSummary = { errs, notes, campaigns: out.map(c => ({ name: c.name, creators: c.creators.length, cpm: c.cpm, cpmAllTime: c.cpmAllTime, viewsAllTime: c.viewsAllTime, spendAllTime: c.spendAllTime })) };
   if (out.length) {
     let fr = document.getElementById('__pf'); if (!fr) { fr = document.createElement('iframe'); fr.name = '__pf'; fr.id = '__pf'; fr.style.display = 'none'; document.body.appendChild(fr); }
