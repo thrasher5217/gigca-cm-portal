@@ -395,7 +395,16 @@ const has=(r,k)=>r.f.some(f=>f.k===k);
 const pendingUn=c=>{const m=c.unanswered.filter(u=>isTy(u.coach));return (m.length?m:c.unanswered).filter(u=>!sentIds.has(u.id))};
 // @Ty tags in any coach's channels: waiting on Ty himself (left out when the same channel is already in his own queue).
 const tagsOf=c=>{if(!c)return[];const own=new Set(MINE.includes(c.id)?pendingUn(c).map(u=>u.channelId):[]);return (c.tagged||[]).filter(u=>!own.has(u.channelId)&&!sentIds.has(u.id))};
-const waitingOn=c=>c?(MINE.includes(c.id)?pendingUn(c).concat(tagsOf(c)):c.unanswered):[];
+// Creators who haven't answered: staff spoke last in their channel 24h+ ago (up to 14 days), and it wasn't just an acknowledgment.
+const ACKT=/^(ok(ay)?|kk?|bet|thanks?( you)?|ty|tysm|got it|gotcha|sounds good|perfect|awesome|cool|great|nice|love it|lets go|let'?s go|yes+|yep|yup|np|done|👍|🙏|❤️|🔥|💪|🙌|💯)[\s!.,'a-z👍🙏❤️🔥💪🙌💯]*$/i;
+function noResp(c){
+  if(!c||!MINE.includes(c.id))return [];
+  const now=Date.now(),ch=(c.discord||{}).channels||{},waiting=new Set(c.unanswered.concat(c.tagged||[]).map(u=>u.channelId));
+  return Object.entries(ch).filter(([id,v])=>!v.general&&v.lastStaffMsgAt&&!waiting.has(id)).map(([id,v])=>{const st=+new Date(v.lastStaffMsgAt),cr=v.lastCreatorMsgAt?+new Date(v.lastCreatorMsgAt):0,x=c.creators.find(y=>y.channelId===id);
+      return {id:'nr-'+id,channelId:id,channel:'#'+v.name,coach:v.coach,creator:x?x.name:pretty(v.name),waitingMin:Math.round((now-st)/6e4),lastAt:v.lastStaffMsgAt,message:v.lastStaffText||'',by:v.lastStaffBy||'',cr,st,nr:true}})
+    .filter(u=>u.st>u.cr&&u.waitingMin>=1440&&u.waitingMin<=14*1440&&!(u.message&&ACKT.test(u.message.trim().split('\n').pop()))&&!isRead(unKey(u))&&!sentIds.has(u.id));
+}
+const waitingOn=c=>c?(MINE.includes(c.id)?pendingUn(c).concat(tagsOf(c),noResp(c)):c.unanswered):[];
 
 /* ---------- coach daily audit (UGC Coach SOP + strike rules) ---------- */
 const TFS=[['today','Today so far'],['yday','Yesterday'],['7d','7 days'],['lw','Last week'],['30d','30 days'],['custom','Custom']];
@@ -761,7 +770,7 @@ function vToday(){
   const rows=all(), cc=camp('capcut'), mine=rows.filter(r=>r.c.id==='capcut');
   const st=k=>rows.filter(r=>cstat(r.c,r.x).k===k).length;
   let h='<div class="kpis">'+
-    kpi(MINE.reduce((n,k)=>n+waitingOn(camp(k)).length,0)+CAMPS.filter(k=>!MINE.includes(k)).reduce((n,k)=>n+tagsOf(camp(k)).length,0),'Creators waiting on you (incl. @ tags)',MINE.some(k=>waitingOn(camp(k)).length)||CAMPS.some(k=>tagsOf(camp(k)).length)?'red':'')+
+    kpi(MINE.reduce((n,k)=>n+waitingOn(camp(k)).length,0)+CAMPS.filter(k=>!MINE.includes(k)).reduce((n,k)=>n+tagsOf(camp(k)).length,0),'Waiting on you (replies, @ tags, 24h follow-ups)',MINE.some(k=>waitingOn(camp(k)).length)||CAMPS.some(k=>tagsOf(camp(k)).length)?'red':'')+
     kpi(`<a href="#coaches" style="text-decoration:none">${(S.coachItems||[]).length}</a>`,'Coaches server: need your reply',(S.coachItems||[]).length?'red':'')+
     kpi(S.slack.length+(S.dms||[]).length,'Slack + Discord DMs to answer',S.slack.length+(S.dms||[]).length?'amb':'')+
     kpi(cc?newJoiners(cc).filter(r=>r.needs).length:0,'New creators to welcome','blu')+
@@ -793,7 +802,7 @@ function vToday(){
 function vCampaign(id,sub){
   const c=camp(id); if(!c)return `<div class="empty">No ${NAMES[id]} data yet.</div>`;
   const cap=MINE.includes(id), audits=c.coachNames.map(n=>fullAudit(c,n));
-  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length,true],...(c.creators.length||newJoiners(c).length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[...(tagsOf(c).length?[['tagged','Tagged you',tagsOf(c).length,true]]:[]),['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
+  const tabs=[...(cap?[['reply','Needs reply',pendingUn(c).length+tagsOf(c).length+noResp(c).length,true],...(c.creators.length||newJoiners(c).length?[['new','New creators',newJoiners(c).filter(r=>r.needs&&(!WHO[id]||r.x.coach===WHO[id])).length,false]]:[])]:[...(tagsOf(c).length?[['tagged','Tagged you',tagsOf(c).length,true]]:[]),['inbox','Waiting on reply',c.unanswered.length,c.unanswered.some(u=>u.waitingMin>=900)]]),
     ['summary','Coach audit',audits.filter(a=>a.bad).length,audits.some(a=>a.bad)],['caudit','Campaign audit',null],
     ...audits.map(a=>['coach:'+a.name,first(a.name),a.bad,a.bad>0]),
     ['posts',"Didn't post",null],['warm','Warming up',c.creators.filter(x=>cstat(c,x).k==='warming').length,false],
@@ -823,9 +832,9 @@ const byWho=(c,coach)=>{const w=WHO[c.id]||'all';return w==='all'||coach===w};
 
 // One waiting message with a reply box: Send (Mac Mini posts it as Ty), Copy & open, Mark read.
 function replyItem(c,u){const done=sentIds.has(u.id)||copied.has(u.id), url=msgUrl(c,u), sd=sendOf(c,u), busy=sd&&(sd.status==='pending'||sd.status==='running'), canSend=!!(u.channelId&&(c.guildId||GUILD[c.id]));
-    return `<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span>${u.tagged?'<span class="tag red">@ you</span>':''}<span class="sp"></span><span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span></div>
-    <div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">${u.tagged?'Last from staff':'Last from coach'}: ${esc(u.context)}</div>`:''}
-    <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="Write a reply…" ${busy?'disabled':''}>${esc(busy?sd.text:u.draft||'')}</textarea>
+    return `<div class="item ${sentIds.has(u.id)?'done':''}">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span>${u.tagged?'<span class="tag red">@ you</span>':''}<span class="sp"></span>${u.nr?`<span class="tag amb">No response in 24h · ${wait(u.waitingMin)}</span>`:`<span class="tag ${waitCls(u.waitingMin)}">waiting ${wait(u.waitingMin)}</span>`}</div>
+    ${u.nr?`<div class="ctx" style="margin-top:7px">${u.message?`${isTy(u.by)?'You':esc(u.by||'Staff')} said: <span style="color:var(--text)">${esc(u.message)}</span>`:"You (or staff) spoke last and they haven't replied. Your last message shows after the next full check."}</div>`:`<div class="quote">${esc(u.message)}</div>${u.context?`<div class="ctx">${u.tagged?'Last from staff':'Last from coach'}: ${esc(u.context)}</div>`:''}`}
+    <textarea id="d_${esc(u.id)}" style="margin-top:10px" placeholder="${u.nr?'Write a follow-up…':'Write a reply…'}" ${busy?'disabled':''}>${esc(busy?sd.text:u.draft||'')}</textarea>
     <div class="actions">${canSend?`<button class="pri sm" data-sendreply="${esc(u.id)}" data-camp="${c.id}" ${busy?'disabled':''}>${busy?'Sending…':sd&&sd.status==='failed'?'Try again':'Send'}</button><button class="sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓':'Copy & open'}</button>`:`<button class="pri sm" data-copyreply="${esc(u.id)}" data-url="${esc(url||'')}">${done?'Copied ✓ · copy again':'Copy reply & open in Discord'}</button>`}${sd?sendTag(sd):''}${openLink(url,!!u.messageId)}<span class="sp"></span>${readBtn(unKey(u),u.creator+' '+u.channel,c,u)}${u.channelId?`<button class="sm ghost" data-recheck="${esc(u.channelId)}" data-camp="${c.id}">↻ Recheck</button>`:''}<span class="hint">${u.draft?'AI draft':'No draft'}</span></div></div></div>`
 }
 function vReply(c){
@@ -833,11 +842,13 @@ function vReply(c){
   let h=`<div class="bar">${whoSeg(c,un,k=>un.filter(u=>k==='all'||u.coach===k).length)}<span class="sp"></span><label class="hint">Sort <select id="sortsel">${[['wait','Longest waiting'],['new','Newest first'],['name','Name']].map(([k,l])=>`<option value="${k}" ${SORT===k?'selected':''}>${l}</option>`).join('')}</select></label></div>`;
   const list=c.unanswered.filter(u=>byWho(c,u.coach)).concat(tagsOf(c)).sort((a,b)=>SORT==='name'?String(a.creator).localeCompare(b.creator):SORT==='new'?a.waitingMin-b.waitingMin:b.waitingMin-a.waitingMin);
   const rd=readSection((c.readUn||[]).filter(u=>byWho(c,u.coach)),unKey,(u,btn)=>`<div class="item">${av(u.creator)}<div><div class="ihead"><b>${esc(u.creator)}</b><span class="meta">${esc(u.channel)} · ${esc(u.coach||'Unassigned')}</span></div><div class="quote">${esc(u.message)}</div><div class="actions">${openLink(msgUrl(c,u),!!u.messageId)}<span class="sp"></span>${btn}</div></div></div>`);
-  if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>'+rd;
+  const nr=noResp(c).filter(u=>byWho(c,u.coach)).sort((a,b)=>b.waitingMin-a.waitingMin);
+  const nrSec=nr.length?`<h2>No response in 24h <span class="sub">${plural(nr.length,'creator')} · you spoke last and they haven't replied</span></h2><div class="list">${nr.map(u=>replyItem(c,u)).join('')}</div>`:'';
+  if(!list.length)return h+'<div class="empty">Everyone has been answered.</div>'+nrSec+rd;
   const over=list.filter(u=>u.waitingMin>=900).length;
   h+=`<p class="lede">${plural(list.length,'creator')} spoke last and ${list.length===1?'is':'are'} waiting${over?`, <span class="red">${over} over 15h</span>`:''}. Drafts are AI suggestions in your voice. Edit, then Send: the Mac Mini posts it in their channel as you, usually within a minute or two.</p><div class="list">`;
   for(const u of list)h+=replyItem(c,u);
-  return h+'</div>'+rd;
+  return h+'</div>'+nrSec+rd;
 }
 
 // Campaigns without LaunchPoint data (YRI) get their new creators from the Discord channels made in the last 7 days.
@@ -1193,7 +1204,7 @@ document.addEventListener('click',async e=>{
   else if(d.fullaudit){if(await act([{type:'rescan',scope:'all'},{type:'audit',range:{kind:'lw'}}])){toast(live?'Queued · full check first, then the audit':'Queued (preview)');$('#menu').classList.remove('on');render()}}
   else if(d.rescan)rescan(d.rescan);
   else if(d.recheck)rescan('channel:'+(d.camp||'capcut')+':'+d.recheck);
-  else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[]).find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
+  else if(d.sendreply){const c=camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[],noResp(c)).find(x=>x.id===d.sendreply),ta=$('#d_'+CSS.escape(d.sendreply)),text=ta?ta.value:'';
     if(!u)return;if(!text.trim())return toast('Write a reply first');if(text.length>2000)return toast('Too long: Discord allows 2000 characters');
     if(await act([{type:'discord_send',live:true,campaign:c.id,creator:u.creator,channel:u.channel,channelId:u.channelId,guildId:c.guildId||GUILD[c.id],text}])){toast(live?'Queued · the Mac Mini sends it as you':'Send queued (preview)');render()}}
   else if(d.clearq){const sc=d.clearq==='scans';
@@ -1221,8 +1232,8 @@ document.addEventListener('click',async e=>{
   else if(d.ff){F.flag=d.ff;render()}
   else if(d.who){WHO[d.wc]=d.who;render()}
   else if(d.tf){TF=d.tf;render()}
-  else if(d.markread){const c=d.camp&&camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[]).find(x=>x.id===d.uid);
-    markRead(d.markread,d.label||'',true,u&&u.channelId?{c:c.id,ch:u.channelId,coach:u.coach||'',start:startOf(c,u),last:u.lastAt||null}:null)}
+  else if(d.markread){const c=d.camp&&camp(d.camp),u=c&&c.unanswered.concat(c.tagged||[],noResp(c)).find(x=>x.id===d.uid);
+    markRead(d.markread,d.label||'',true,u&&u.channelId&&!u.nr?{c:c.id,ch:u.channelId,coach:u.coach||'',start:startOf(c,u),last:u.lastAt||null}:null)}
   else if(d.unread)markRead(d.unread,'',false);
   else if(d.showread){SHOWREAD=!SHOWREAD;render()}
 });

@@ -167,7 +167,7 @@
       const L = runs[runs.length - 1], lastC = [...runs].reverse().find(r => !r.st), lastS = [...runs].reverse().find(r => r.st), firstS = hs.find(m => m.st);
       const warm = [...hs].reverse().find(m => !m.st && WARM.test(m.x)), iso = t => t ? new Date(t).toISOString() : null;
       channels[c.id] = { name: c.name, cat: c.cat, coach, msgs: hs.length, responseRate: asked ? Math.round(answered / asked * 100) : null,
-        lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), firstStaffAt: iso(firstS && firstS.t), startLoaded: c.startLoaded ?? null,
+        lastCreatorMsgAt: iso(lastC && lastC.end), lastStaffMsgAt: iso(lastS && lastS.end), lastStaffText: lastS ? lastS.x.slice(-300) : null, lastStaffBy: lastS ? lastS.a : null, firstStaffAt: iso(firstS && firstS.t), startLoaded: c.startLoaded ?? null,
         firstMsgAt: iso(c.msgs.reduce((m, x) => { const t = +new Date(x.t); return t && (!m || t < m) ? t : m; }, 0) || null), // usually the LaunchPoint welcome (bots included) oldestMsgAt: iso(hs[0] && hs[0].t),
         warmAt: iso(warm && warm.t), warmText: warm ? warm.x.slice(0, 160) : null };
       const ls = L && !L.st ? clockStart(L) : null;
